@@ -18,6 +18,8 @@ import ngoAuthRoutes from './routes/ngoAuth.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 import adminNgoRoutes from './routes/adminNgo.routes.js';
 import ngoPortalRoutes from './routes/ngoPortal.routes.js';
+import categoryRoutes from './routes/category.routes.js';
+import serviceRoutes, { centersRouter } from './routes/service.routes.js';
 import { initRealtime } from './services/realtime.service.js';
 import { UPLOADS_PUBLIC_PATH, UPLOADS_ROOT } from './services/upload.service.js';
 // import departmentRoutes from './routes/department.routes.js';
@@ -70,6 +72,9 @@ app.use('/api/v1/auth/ngo', ngoAuthRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/v1/admin/ngos', adminNgoRoutes);
 app.use('/api/v1/ngo', ngoPortalRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/services', serviceRoutes);
+app.use('/api/centers', centersRouter);
 
 // ── Uploaded files (local storage only; drop this once files are served from cloud storage)
 app.use(UPLOADS_PUBLIC_PATH, express.static(UPLOADS_ROOT, {

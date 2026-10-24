@@ -1,9 +1,9 @@
-import { saveTempPdf } from '../services/upload.service.js';
+import { saveImage, saveTempPdf } from '../services/upload.service.js';
 import { HttpError } from '../utils/httpError.js';
 
-export const uploadFile = async (req, res) => {
+const respondWith = (save) => async (req, res) => {
     try {
-        const file = await saveTempPdf(req.file);
+        const file = await save(req.file);
         return res.status(201).json({
             success: true, message: 'تم رفع الملف بنجاح', fileUrl: file.fileUrl, data: file,
         });
@@ -17,3 +17,6 @@ export const uploadFile = async (req, res) => {
         return res.status(500).json({ success: false, message: 'تعذّر حفظ الملف، حاول مرة أخرى', data: null });
     }
 };
+
+export const uploadFile = respondWith(saveTempPdf);
+export const uploadImage = respondWith(saveImage);

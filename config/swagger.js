@@ -300,6 +300,8 @@ const options = {
     path.join(__dirname, '../routes/upload.routes.js'),
     path.join(__dirname, '../routes/adminNgo.routes.js'),
     path.join(__dirname, '../routes/ngoPortal.routes.js'),
+    path.join(__dirname, '../routes/category.routes.js'),
+    path.join(__dirname, '../routes/service.routes.js'),
     path.join(__dirname, '../routes/department.routes.js'),
     path.join(__dirname, '../routes/employee.routes.js'),
     path.join(__dirname, '../routes/task.routes.js'),

@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { uploadFile } from '../controllers/upload.controller.js';
-import { singlePdf } from '../services/upload.service.js';
+import { uploadFile, uploadImage } from '../controllers/upload.controller.js';
+import { ADMIN_ROLES, authenticate, checkRole } from '../middlewares/auth.middleware.js';
+import { singleImage, singlePdf } from '../services/upload.service.js';
 
 const router = Router();
 
@@ -41,6 +42,28 @@ const router = Router();
  *       '413': { description: File larger than 5 MB }
  *       '415': { description: Not a PDF (MIME type, extension or file signature) }
  */
+/**
+ * @openapi
+ * /api/upload/image:
+ *   post:
+ *     tags: [Uploads]
+ *     summary: Upload one image (PNG / JPG / WebP, max 3 MB) — admins only, e.g. service thumbnails
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       '201': { description: 'fileUrl: /uploads/images/<uuid>.<ext>' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '413': { description: Image larger than 3 MB }
+ *       '415': { description: Not a PNG, JPG or WebP (checked by file signature) }
+ */
 router.post('/', singlePdf('file'), uploadFile);
+router.post('/image', authenticate, checkRole(...ADMIN_ROLES), singleImage('file'), uploadImage);
 
 export default router;

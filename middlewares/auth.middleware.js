@@ -38,3 +38,19 @@ export const checkRole = (...roles) => (req, res, next) =>
 export const ADMIN_ROLES = ['admin', 'SUPER_ADMIN'];
 // Role carried by NGO tokens (NGOs live in the ngos table, not users).
 export const NGO_ROLE = 'ngo';
+
+// Public routes that show more to staff: sets req.isAdmin when a valid admin token is sent.
+// A missing or invalid token is not an error here — the request is simply treated as public.
+export const optionalAuth = (req, res, next) => {
+    const match = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization || '');
+    req.isAdmin = false;
+    if (match) {
+        try {
+            req.user = verifyAccessToken(match[1]);
+            req.isAdmin = ADMIN_ROLES.includes(req.user.role);
+        } catch {
+            req.user = undefined;
+        }
+    }
+    return next();
+};
