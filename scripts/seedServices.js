@@ -27,7 +27,7 @@ try {
 
     for (const center of data.centers) {
         await client.query(
-            `INSERT INTO centers (id, title) VALUES ($1, $2)
+            `INSERT INTO enablement_centers (id, title) VALUES ($1, $2)
              ON CONFLICT (id) DO ${reset ? 'UPDATE SET title = EXCLUDED.title, updated_at = NOW()' : 'NOTHING'}`,
             [center.id, center.title]
         );
@@ -39,25 +39,27 @@ try {
         const { rowCount } = await client.query(
             `INSERT INTO services (id, title, status, image_url, price, request_count, rating, response_time,
                  duration, category_id, full_description, short_description, outputs, work_methodology,
-                 target_audience, includes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                 target_audience, includes, required_attachments)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
              ON CONFLICT (id) DO ${reset ? `UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status,
                  image_url = EXCLUDED.image_url, price = EXCLUDED.price, request_count = EXCLUDED.request_count,
                  rating = EXCLUDED.rating, response_time = EXCLUDED.response_time, duration = EXCLUDED.duration,
                  category_id = EXCLUDED.category_id, full_description = EXCLUDED.full_description,
                  short_description = EXCLUDED.short_description, outputs = EXCLUDED.outputs,
                  work_methodology = EXCLUDED.work_methodology, target_audience = EXCLUDED.target_audience,
-                 includes = EXCLUDED.includes, updated_at = NOW()` : 'NOTHING'}`,
+                 includes = EXCLUDED.includes, required_attachments = EXCLUDED.required_attachments,
+                 updated_at = NOW()` : 'NOTHING'}`,
             [s.id, s.title, s.status, s.imageUrl, s.price, s.requestCount, s.rating, s.responseTime,
                 s.duration, categoryIds[s.category], s.fullDescription, s.shortDescription,
                 JSON.stringify(s.outputs), JSON.stringify(s.workMethodology),
-                JSON.stringify(s.targetAudience), JSON.stringify(s.includes)]
+                JSON.stringify(s.targetAudience), JSON.stringify(s.includes),
+                JSON.stringify(s.requiredAttachments || [])]
         );
         inserted += rowCount;
-        if (reset) await client.query('DELETE FROM service_centers WHERE service_id = $1', [s.id]);
+        if (reset) await client.query('DELETE FROM center_services WHERE service_id = $1', [s.id]);
         for (const centerId of s.centerIds) {
             await client.query(
-                'INSERT INTO service_centers (service_id, center_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                'INSERT INTO center_services (service_id, center_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
                 [s.id, centerId]
             );
         }

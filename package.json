@@ -10,7 +10,10 @@
     "migrate": "node scripts/migrate.js",
     "seed:admins": "node scripts/seed_admins.js",
     "seed:demo": "node scripts/seed_departments_and_employees.js",
-    "seed:services": "node scripts/seedServices.js"
+    "seed:services": "node scripts/seedServices.js",
+    "seed:centers": "node scripts/seedCenters.js",
+    "seed:requests": "node scripts/seedRequests.js",
+    "seed:rbac": "node scripts/seedRbac.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -20,6 +23,7 @@
     "joi": "^18.2.9",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.5.0",
+    "nodemailer": "^10.2.1",
     "pg": "^8.23.1",
     "socket.io": "^4.8.4",
     "swagger-jsdoc": "^6.3.0",

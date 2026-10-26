@@ -1,10 +1,12 @@
 import Joi from 'joi';
 
 export const SERVICE_STATUSES = ['active', 'inactive', 'coming_soon'];
-const MAX_LIST_ITEMS = 50;
+export const MAX_LIST_ITEMS = 50;
+// Center ids are slugs (see enablement_centers.id).
+export const CENTER_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // A list of text items. Blank rows (an empty "+ add item" input) are dropped, not rejected.
-const textList = (label) => Joi.array()
+export const textList = (label) => Joi.array()
     .items(Joi.string().trim().allow('').max(500).messages({ 'string.max': `عنصر في ${label} أطول من 500 حرف` }))
     .max(MAX_LIST_ITEMS)
     .default([])
@@ -20,11 +22,25 @@ const step = Joi.alternatives().try(
     }),
 ).messages({ 'alternatives.match': 'خطوة غير صالحة في منهجية العمل' });
 
-const methodology = Joi.array().items(step).max(MAX_LIST_ITEMS).default([])
+export const methodology = Joi.array().items(step).max(MAX_LIST_ITEMS).default([])
     .custom((steps) => steps.filter((item) => item.title))
     .messages({ 'array.base': 'منهجية العمل يجب أن تكون قائمة', 'array.max': `منهجية العمل: الحد الأقصى ${MAX_LIST_ITEMS} خطوة` });
 
-const optionalText = (max) => Joi.string().trim().max(max).allow('', null).default(null)
+// Request attachments: { name, required }. required = the request can't be submitted without it.
+// A plain string is accepted as a required document. Rows without a name are dropped.
+const attachment = Joi.alternatives().try(
+    Joi.string().trim().allow('').max(500).custom((name) => ({ name, required: true })),
+    Joi.object({
+        name: Joi.string().trim().allow('').max(500).required(),
+        required: Joi.boolean().default(true),
+    }),
+).messages({ 'alternatives.match': 'مرفق غير صالح في المرفقات المطلوبة' });
+
+const attachmentList = Joi.array().items(attachment).max(MAX_LIST_ITEMS).default([])
+    .custom((items) => items.filter((item) => item.name))
+    .messages({ 'array.base': 'المرفقات المطلوبة يجب أن تكون قائمة', 'array.max': `المرفقات المطلوبة: الحد الأقصى ${MAX_LIST_ITEMS} مرفقًا` });
+
+export const optionalText = (max) => Joi.string().trim().max(max).allow('', null).default(null)
     .custom((value) => value || null);
 
 // Create and update share the schema: the admin form always sends the full service.
@@ -48,7 +64,9 @@ export const serviceSchema = Joi.object({
     workMethodology: methodology,
     targetAudience: textList('الفئة المستهدفة'),
     includes: textList('ما تشمله الخدمة'),
-    centerIds: Joi.array().items(Joi.string().trim().pattern(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(100))
+    // Documents the NGO attaches when requesting (names only, no files here).
+    requiredAttachments: attachmentList,
+    centerIds: Joi.array().items(Joi.string().trim().pattern(CENTER_ID_PATTERN).max(100))
         .unique().max(MAX_LIST_ITEMS).default([])
         .messages({ 'array.unique': 'تم اختيار نفس المركز أكثر من مرة', 'string.pattern.base': 'معرّف مركز غير صالح' }),
 });

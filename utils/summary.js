@@ -1,21 +1,11 @@
-// Builds a short summary from a long text: its first two lines, or — for a single
-// paragraph — its first two sentences. The dashboard previews the same rules live
+// Builds the card's short summary from a long text: its first SUMMARY_MAX_WORDS words,
+// ending with "…" when the text is longer. The dashboard previews the same rule live
 // (nemaa_services_dashboard/src/utils/summary.js); keep the two in sync.
-export const SUMMARY_MAX_LENGTH = 280;
-const SENTENCE = /[^.!?؟]+[.!?؟]+/g;
+export const SUMMARY_MAX_WORDS = 8;
 
 export const buildShortDescription = (text = '') => {
-    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    let summary;
-    if (lines.length >= 2) {
-        summary = lines.slice(0, 2).join(' ');
-    } else {
-        const paragraph = lines[0] || '';
-        const sentences = paragraph.match(SENTENCE)?.map((sentence) => sentence.trim()) ?? [];
-        summary = sentences.length ? sentences.slice(0, 2).join(' ') : paragraph;
-    }
-    if (summary.length <= SUMMARY_MAX_LENGTH) return summary;
-    // Cut on a word boundary so the summary never ends mid-word.
-    const cut = summary.slice(0, SUMMARY_MAX_LENGTH);
-    return `${cut.slice(0, cut.lastIndexOf(' ') > 0 ? cut.lastIndexOf(' ') : cut.length).trim()}…`;
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= SUMMARY_MAX_WORDS) return words.join(' ');
+    // Drop punctuation left dangling on the last kept word (e.g. "الجمعية،") before the ellipsis.
+    return `${words.slice(0, SUMMARY_MAX_WORDS).join(' ').replace(/[\s.,;:!?؟،؛]+$/, '')}…`;
 };

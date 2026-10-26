@@ -1,0 +1,71 @@
+# Deploys the API to the Hostinger VPS on every push to main:
+# check the code → SSH → git pull → npm ci → npm run migrate → pm2 reload.
+#
+# Repository secrets:   HOSTINGER_SSH_HOST, HOSTINGER_SSH_USER, HOSTINGER_SSH_KEY (private key), HOSTINGER_SSH_PORT (optional, 22)
+# Repository variables: BACKEND_DIR (optional, default /var/www/nemaa/backend) — the clone of this repo on the VPS
+# One-time server setup: see deploy/DEPLOY.md.
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push waits for the running deployment instead of racing it (migrations must not overlap).
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Syntax check
+        run: |
+          for file in server.js db.js config/*.js controllers/*.js middlewares/*.js routes/*.js \
+                      services/*.js utils/*.js validators/*.js templates/*.js scripts/*.js; do
+            node --check "$file"
+          done
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull, install, migrate and reload on the VPS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          BACKEND_DIR: ${{ vars.BACKEND_DIR || '/var/www/nemaa/backend' }}
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT || 22 }}
+          envs: BACKEND_DIR
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "$BACKEND_DIR"
+            test -f .env || { echo "Missing $BACKEND_DIR/.env (see deploy/DEPLOY.md)"; exit 1; }
+            # The server copy only follows main; local edits on the VPS are discarded.
+            git fetch --prune origin main
+            git reset --hard origin/main
+            npm ci --omit=dev
+            # Pending migrations run in one transaction: if one fails nothing is applied and the
+            # running API is left untouched (the reload below is skipped).
+            npm run migrate
+            if pm2 describe nemaa-backend > /dev/null 2>&1; then
+              pm2 reload nemaa-backend --update-env
+            else
+              pm2 start ecosystem.config.cjs
+            fi
+            pm2 save
+            # Health check on the port from .env (default 3000).
+            PORT=$(grep -E '^PORT=' .env | cut -d= -f2 | tr -d '[:space:]' || true)
+            sleep 3
+            curl -fsS "http://127.0.0.1:${PORT:-3000}/" > /dev/null && echo "API is up on port ${PORT:-3000}"

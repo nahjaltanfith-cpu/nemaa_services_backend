@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import * as controller from '../controllers/category.controller.js';
-import { ADMIN_ROLES, authenticate, checkRole } from '../middlewares/auth.middleware.js';
+import { P } from '../config/permissions.js';
+import { authenticate, requirePermission } from '../middlewares/auth.middleware.js';
 import { parseIdParam } from '../middlewares/params.middleware.js';
 import { validateBody } from '../middlewares/validate.middleware.js';
 import { categorySchema } from '../validators/category.validator.js';
 
 const router = Router();
-const adminOnly = [authenticate, checkRole(...ADMIN_ROLES)];
+// Catalog writes: super admins and roles with manage:catalog (e.g. CONTENT_MANAGER).
+const adminOnly = [authenticate, requirePermission(P.MANAGE_CATALOG)];
 
 /**
  * @openapi

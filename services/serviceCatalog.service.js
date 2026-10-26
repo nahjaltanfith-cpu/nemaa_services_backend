@@ -12,7 +12,7 @@ const SELECT = `
     SELECT s.*, c.name AS category_name,
         COALESCE((
             SELECT json_agg(json_build_object('id', ce.id, 'title', ce.title) ORDER BY ce.title)
-            FROM service_centers sc JOIN centers ce ON ce.id = sc.center_id
+            FROM center_services sc JOIN enablement_centers ce ON ce.id = sc.center_id
             WHERE sc.service_id = s.id
         ), '[]') AS centers
     FROM services s
@@ -36,6 +36,7 @@ const toService = (row) => ({
     workMethodology: row.work_methodology,
     targetAudience: row.target_audience,
     includes: row.includes,
+    requiredAttachments: row.required_attachments,
     centers: row.centers,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -46,12 +47,12 @@ const notFound = () => new HttpError(404, 'الخدمة غير موجودة', 'N
 const mapDbError = (error) => {
     if (error.code !== '23503') return error;
     if (error.constraint?.includes('category')) return new HttpError(400, 'التصنيف المختار غير موجود', 'CATEGORY_NOT_FOUND');
-    if (error.constraint?.includes('center')) return new HttpError(400, 'أحد المراكز المختارة غير موجود', 'CENTER_NOT_FOUND');
+    if (error.constraint === 'center_services_center_fkey') return new HttpError(400, 'أحد المراكز المختارة غير موجود', 'CENTER_NOT_FOUND');
     return error;
 };
 
 // Only images uploaded through POST /api/upload/image (and still stored), or the website's own assets.
-const assertValidImage = async (imageUrl) => {
+export const assertValidImage = async (imageUrl) => {
     if (!imageUrl || SITE_ASSET_PATTERN.test(imageUrl)) return;
     const key = keyFromPublicUrl(imageUrl);
     if (!key || !(await fileExists(key, IMAGE_KEY_PATTERN))) {
@@ -91,15 +92,15 @@ const columnValues = (data) => [
     data.title, data.status, data.imageUrl, data.price, data.responseTime, data.duration, data.categoryId,
     data.fullDescription, data.shortDescription || buildShortDescription(data.fullDescription),
     JSON.stringify(data.outputs), JSON.stringify(data.workMethodology),
-    JSON.stringify(data.targetAudience), JSON.stringify(data.includes),
+    JSON.stringify(data.targetAudience), JSON.stringify(data.includes), JSON.stringify(data.requiredAttachments),
 ];
 
 // Inside a transaction: replaces the service's centers with exactly `centerIds`.
 const replaceCenters = async (client, serviceId, centerIds) => {
-    await client.query('DELETE FROM service_centers WHERE service_id = $1', [serviceId]);
+    await client.query('DELETE FROM center_services WHERE service_id = $1', [serviceId]);
     if (centerIds.length) {
         await client.query(
-            `INSERT INTO service_centers (service_id, center_id)
+            `INSERT INTO center_services (service_id, center_id)
              SELECT $1, unnest($2::varchar[])`,
             [serviceId, centerIds]
         );
@@ -126,8 +127,9 @@ export const createService = async (data) => {
     const id = await inTransaction(async (client) => {
         const { rows } = await client.query(
             `INSERT INTO services (title, status, image_url, price, response_time, duration, category_id,
-                 full_description, short_description, outputs, work_methodology, target_audience, includes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 full_description, short_description, outputs, work_methodology, target_audience, includes,
+                 required_attachments)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING id`,
             columnValues(data)
         );
@@ -144,6 +146,7 @@ export const updateService = async (id, data) => {
             `UPDATE services SET title = $2, status = $3, image_url = $4, price = $5, response_time = $6,
                  duration = $7, category_id = $8, full_description = $9, short_description = $10,
                  outputs = $11, work_methodology = $12, target_audience = $13, includes = $14,
+                 required_attachments = $15,
                  updated_at = NOW()
              WHERE id = $1`,
             [id, ...columnValues(data)]
@@ -154,7 +157,7 @@ export const updateService = async (id, data) => {
     return getService(id, { includeHidden: true });
 };
 
-// service_centers rows go with it (ON DELETE CASCADE).
+// center_services rows go with it (ON DELETE CASCADE).
 export const deleteService = async (id) => {
     const { rowCount } = await pool.query('DELETE FROM services WHERE id = $1', [id]);
     if (!rowCount) throw notFound();
@@ -176,9 +179,4 @@ export const incrementRequestCount = async (serviceId, client = pool) => {
     );
     if (!rows.length) throw new HttpError(409, 'الخدمة غير متاحة للطلب حاليًا', 'SERVICE_NOT_REQUESTABLE');
     return rows[0].request_count;
-};
-
-export const listCenters = async () => {
-    const { rows } = await pool.query('SELECT id, title FROM centers ORDER BY title');
-    return rows;
 };

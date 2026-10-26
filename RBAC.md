@@ -36,3 +36,17 @@ router.get('/admin/stats', authenticate, checkRole('admin', 'SUPER_ADMIN'), getS
 الدور داخل JWT. تغيير الدور يسري عند تسجيل الدخول مجددًا أو انتهاء التوكن القديم. لتنفيذ تغييرات الصلاحيات فورًا، يجب قراءة الدور الحالي من قاعدة البيانات داخل `authenticate`.
 ## التحقق
 نجح 21 تحققًا مع PostgreSQL معزول وطلبات HTTP فعلية على مسارات Express، شملت قاعدة جديدة وترحيل الأدوار القديمة وتكرار الترحيل وتشفير كلمات السر والتحقق من JWT ومنع التصعيد من التسجيل. لم تُستخدم بيانات المشروع في هذه الاختبارات.
+
+## مصفوفة الصلاحيات والنطاق (020)
+```powershell
+npm run migrate
+npm run seed:rbac   # اختياري: مسميات وموظفين تجريبيين، كلمة المرور 12345678 أو SEED_STAFF_PASSWORD
+```
+- الصلاحيات بصيغة `<فعل>:<كائن>` (16 صلاحية في `config/permissions.js`). الترحيل يحوّل المفاتيح القديمة (`requests.manage` …) إلى ما يقابلها، فلا يفقد أي دور ما كان يستطيعه.
+- النطاق على مستويين في جدول `roles`: `scope_type` (`all_services` / `specific_services` عبر `role_services` / `specific_centers` عبر `role_centers`) و`assigned_only` (الطلبات المسندة للموظف فقط داخل النطاق). المركز يشمل طلباته وطلبات الخدمات التي يقدمها.
+- التطبيق في الباك اند: كل استعلامات طلبات الإدارة تضيف شرط النطاق (`services/requestScope.js`)، والطلب خارج النطاق يرجع 404. أحداث Socket.io للطلبات تصل فقط لمن يرى الطلب.
+- تغيير الحالة يحتاج صلاحية حسب الانتقال: `needs_completion` ← `request:order_info`، `in_progress` ← `approve:service_orders`، `completed` ← `complete:order`، ملاحظة بنفس الحالة ← `document:updates`.
+- الإسناد: `PATCH /api/v1/admin/requests/:id/assignee` (`assign:orders`). المسند إليه يجب أن يملك دوره `execute:orders` ويشمل نطاقه خدمة الطلب.
+- الكتالوج: الحقول خارج صلاحية المستخدم تبقى بقيمتها المحفوظة (السعر ← `manage:pricing`، المرفقات المطلوبة ← `manage:form_configs`، الباقي ← `manage:catalog`).
+- غير مدير النظام لا يمنح صلاحيات لا يملكها، ولا يعدّل دوره، ولا يدير حسابات أو أدوار الصلاحيات الكاملة.
+- سجل النشاط: `GET /api/activity-log` (`read:activity_log`).

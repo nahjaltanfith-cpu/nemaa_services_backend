@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { uploadFile, uploadImage } from '../controllers/upload.controller.js';
-import { ADMIN_ROLES, authenticate, checkRole } from '../middlewares/auth.middleware.js';
+import { P } from '../config/permissions.js';
+import { authenticate, requirePermission } from '../middlewares/auth.middleware.js';
 import { singleImage, singlePdf } from '../services/upload.service.js';
 
 const router = Router();
@@ -64,6 +65,6 @@ const router = Router();
  *       '415': { description: Not a PNG, JPG or WebP (checked by file signature) }
  */
 router.post('/', singlePdf('file'), uploadFile);
-router.post('/image', authenticate, checkRole(...ADMIN_ROLES), singleImage('file'), uploadImage);
+router.post('/image', authenticate, requirePermission(P.MANAGE_CATALOG), singleImage('file'), uploadImage);
 
 export default router;

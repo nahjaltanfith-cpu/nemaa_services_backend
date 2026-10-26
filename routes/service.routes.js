@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import * as controller from '../controllers/service.controller.js';
-import { ADMIN_ROLES, authenticate, checkRole, optionalAuth } from '../middlewares/auth.middleware.js';
+import { CATALOG_EDIT, P } from '../config/permissions.js';
+import { authenticate, optionalAuth, requireAnyPermission, requirePermission } from '../middlewares/auth.middleware.js';
 import { parseIdParam } from '../middlewares/params.middleware.js';
 import { validateBody } from '../middlewares/validate.middleware.js';
 import { serviceSchema } from '../validators/service.validator.js';
 
 const router = Router();
-const adminOnly = [authenticate, checkRole(...ADMIN_ROLES)];
+// Create / delete: manage:catalog. Update: any catalog right — the controller applies only the fields
+// the user may change (price: manage:pricing, required attachments: manage:form_configs).
+const adminOnly = [authenticate, requirePermission(P.MANAGE_CATALOG)];
+const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
 
 /**
  * @openapi
@@ -32,6 +36,7 @@ const adminOnly = [authenticate, checkRole(...ADMIN_ROLES)];
  *         workMethodology: { type: array, items: { type: object, properties: { title: { type: string }, description: { type: string } } } }
  *         targetAudience: { type: array, items: { type: string } }
  *         includes: { type: array, items: { type: string } }
+ *         requiredAttachments: { type: array, description: "Documents an NGO attaches; required = blocks submitting without it (a plain string = required)", items: { type: object, properties: { name: { type: string }, required: { type: boolean } } } }
  *         centers: { type: array, items: { type: object, properties: { id: { type: string }, title: { type: string } } } }
  *     ServiceInput:
  *       type: object
@@ -45,7 +50,7 @@ const adminOnly = [authenticate, checkRole(...ADMIN_ROLES)];
  *         duration: { type: string }
  *         categoryId: { type: integer, nullable: true }
  *         fullDescription: { type: string, minLength: 10 }
- *         shortDescription: { type: string, description: Empty → first two lines/sentences of fullDescription }
+ *         shortDescription: { type: string, description: Empty → first 8 words of fullDescription }
  *         outputs: { type: array, items: { type: string } }
  *         workMethodology:
  *           type: array
@@ -55,6 +60,7 @@ const adminOnly = [authenticate, checkRole(...ADMIN_ROLES)];
  *               - { type: object, required: [title], properties: { title: { type: string }, description: { type: string } } }
  *         targetAudience: { type: array, items: { type: string } }
  *         includes: { type: array, items: { type: string } }
+ *         requiredAttachments: { type: array, description: "Documents an NGO attaches; required = blocks submitting without it (a plain string = required)", items: { type: object, properties: { name: { type: string }, required: { type: boolean } } } }
  *         centerIds: { type: array, items: { type: string } }
  * /api/services:
  *   get:
@@ -106,19 +112,11 @@ const adminOnly = [authenticate, checkRole(...ADMIN_ROLES)];
  *     responses:
  *       '200': { description: '{ id }' }
  *       '404': { $ref: '#/components/responses/NotFound' }
- * /api/centers:
- *   get:
- *     tags: [Services]
- *     summary: Centers a service can be linked to (id + title)
- *     security: []
- *     responses:
- *       '200': { description: '[{ id, title }]' }
  */
 router.get('/', optionalAuth, controller.list);
 router.get('/:id', optionalAuth, parseIdParam(), controller.get);
 router.post('/', ...adminOnly, validateBody(serviceSchema), controller.create);
-router.put('/:id', ...adminOnly, parseIdParam(), validateBody(serviceSchema), controller.update);
+router.put('/:id', ...editors, parseIdParam(), validateBody(serviceSchema), controller.update);
 router.delete('/:id', ...adminOnly, parseIdParam(), controller.remove);
 
-export const centersRouter = Router().get('/', controller.listCenters);
 export default router;

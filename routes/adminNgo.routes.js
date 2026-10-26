@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import * as controller from '../controllers/adminNgo.controller.js';
-import { ADMIN_ROLES, authenticate, checkRole } from '../middlewares/auth.middleware.js';
+import { P } from '../config/permissions.js';
+import { authenticate, requirePermission } from '../middlewares/auth.middleware.js';
 import { parseIdParam } from '../middlewares/params.middleware.js';
 import { validateBody } from '../middlewares/validate.middleware.js';
 import { conversationSchema, messageSchema, statusUpdateSchema } from '../validators/review.validator.js';
 
 const router = Router();
-router.use(authenticate, checkRole(...ADMIN_ROLES));
+// Reading NGO files and conversations: read:org_docs. Changing the account status and talking to
+// the NGO (part of the approval workflow): approve:org_accounts.
+router.use(authenticate, requirePermission(P.READ_ORG_DOCS));
+const approver = requirePermission(P.APPROVE_ORG_ACCOUNTS);
 
 /**
  * @openapi
@@ -90,10 +94,10 @@ router.use(authenticate, checkRole(...ADMIN_ROLES));
  */
 router.get('/', controller.listNgos);
 router.get('/:id', parseIdParam(), controller.getNgo);
-router.patch('/:id/status', parseIdParam(), validateBody(statusUpdateSchema), controller.updateStatus);
+router.patch('/:id/status', parseIdParam(), approver, validateBody(statusUpdateSchema), controller.updateStatus);
 router.get('/:id/messages', parseIdParam(), controller.listMessages);
-router.post('/:id/messages', parseIdParam(), validateBody(messageSchema), controller.sendMessage);
+router.post('/:id/messages', parseIdParam(), approver, validateBody(messageSchema), controller.sendMessage);
 router.post('/:id/messages/read', parseIdParam(), controller.markRead);
-router.patch('/:id/conversation', parseIdParam(), validateBody(conversationSchema), controller.setConversation);
+router.patch('/:id/conversation', parseIdParam(), approver, validateBody(conversationSchema), controller.setConversation);
 
 export default router;

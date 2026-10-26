@@ -2,6 +2,7 @@
 import { createServer } from 'node:http';
 import express from 'express';
 import cors from 'cors';
+import { corsOptions } from './config/cors.js';
 import 'dotenv/config';
 import swaggerUi from 'swagger-ui-express';
 
@@ -19,7 +20,12 @@ import uploadRoutes from './routes/upload.routes.js';
 import adminNgoRoutes from './routes/adminNgo.routes.js';
 import ngoPortalRoutes from './routes/ngoPortal.routes.js';
 import categoryRoutes from './routes/category.routes.js';
-import serviceRoutes, { centersRouter } from './routes/service.routes.js';
+import serviceRoutes from './routes/service.routes.js';
+import centerRoutes from './routes/center.routes.js';
+import statsRoutes from './routes/stats.routes.js';
+import { adminRequestsRouter, ngoRequestsRouter } from './routes/requests.routes.js';
+import roleRoutes, { activityRouter } from './routes/roles.routes.js';
+import staffRoutes from './routes/staff.routes.js';
 import { initRealtime } from './services/realtime.service.js';
 import { UPLOADS_PUBLIC_PATH, UPLOADS_ROOT } from './services/upload.service.js';
 // import departmentRoutes from './routes/department.routes.js';
@@ -30,7 +36,7 @@ import { UPLOADS_PUBLIC_PATH, UPLOADS_ROOT } from './services/upload.service.js'
 const app = express();
 
 // ── Global Middleware ─────────────────────────────────────────────────────────
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // ── API Documentation ─────────────────────────────────────────────────────────
@@ -71,10 +77,16 @@ app.use('/api/auth', authRoutes);
 app.use('/api/v1/auth/ngo', ngoAuthRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/v1/admin/ngos', adminNgoRoutes);
+app.use('/api/v1/ngo/requests', ngoRequestsRouter);
 app.use('/api/v1/ngo', ngoPortalRoutes);
+app.use('/api/v1/admin/requests', adminRequestsRouter);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/services', serviceRoutes);
-app.use('/api/centers', centersRouter);
+app.use('/api/centers', centerRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/activity-log', activityRouter);
 
 // ── Uploaded files (local storage only; drop this once files are served from cloud storage)
 app.use(UPLOADS_PUBLIC_PATH, express.static(UPLOADS_ROOT, {
