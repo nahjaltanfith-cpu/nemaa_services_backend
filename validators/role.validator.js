@@ -31,7 +31,7 @@ export const roleSchema = Joi.object({
 });
 
 export const activityFilterSchema = Joi.object({
-    entityType: Joi.string().valid('request', 'role', 'staff', 'ngo', 'service', 'center', 'category'),
+    entityType: Joi.string().valid('request', 'role', 'staff', 'ngo', 'service', 'center', 'category', 'contact'),
     actorId: Joi.number().integer().positive(),
     before: Joi.number().integer().positive(),
 });

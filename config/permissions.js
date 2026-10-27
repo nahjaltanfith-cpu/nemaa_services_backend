@@ -17,6 +17,7 @@ export const P = {
     MANAGE_EMPLOYEES: 'manage:employees',
     MANAGE_ROLES: 'manage:roles',
     READ_ACTIVITY_LOG: 'read:activity_log',
+    MANAGE_CONTACT_REQUESTS: 'manage:contact_requests',
 };
 
 // Any of these lets a user edit (part of) a service or center; the controller checks each field.

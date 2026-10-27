@@ -1,20 +1,25 @@
 import pool from '../db.js';
 import { P } from '../config/permissions.js';
 import {
-    newRequestStaffEmail, ngoApprovedEmail, ngoNeedsDocumentsEmail, requestCompletedEmail, requestNeedsCompletionEmail,
+    contactRequestEmail, newRequestStaffEmail, ngoApprovedEmail, ngoNeedsDocumentsEmail, requestCompletedEmail,
+    requestNeedsCompletionEmail,
 } from '../templates/emailTemplates.js';
+import { CONTACT_TYPES } from './contact.service.js';
 import { queueEmail } from './email.service.js';
 import { ROLE_COVERS_REQUEST } from './requestScope.js';
 
 /**
  * Email only for milestones that need someone to act or that close a case:
  *   NGO account needs documents / approved · request needs completion / completed (to the NGO)
- *   new request submitted (to the staff who route requests) · OTP (services/email.service.js).
+ *   new request submitted (to the staff who route requests) · contact-form message (to the team inbox)
+ *   · OTP (services/email.service.js).
  * Everything else (intermediate statuses, notes, chat) stays as in-app updates.
  * Callers run these after their transaction commits; they never throw.
  */
 const SITE_URL = () => (process.env.SITE_URL || 'http://localhost:5173').replace(/\/+$/, '');
 const DASHBOARD_URL = () => (process.env.DASHBOARD_URL || 'http://localhost:5174').replace(/\/+$/, '');
+// Where contact-form messages are announced (CONTACT_INBOX_EMAIL in .env).
+const CONTACT_INBOX = () => process.env.CONTACT_INBOX_EMAIL || 'info@namaa.sa';
 
 const safely = (label, work) => work().catch((error) => console.error(`[notify] ${label}:`, error.message));
 
@@ -89,4 +94,17 @@ export const notifyNewRequest = (requestId) => safely('new request', async () =>
             }),
         });
     }
+});
+
+// ── Contact form ────────────────────────────────────────────────────────────
+/** A visitor sent the "تواصل معنا" form: one email to the team inbox. */
+export const notifyContactRequest = (contactRequest) => safely('contact request', async () => {
+    queueEmail({
+        to: CONTACT_INBOX(),
+        ...contactRequestEmail({
+            ...contactRequest,
+            typeLabel: CONTACT_TYPES[contactRequest.type],
+            url: `${DASHBOARD_URL()}/dashboard/contact-requests/${contactRequest.id}`,
+        }),
+    });
 });

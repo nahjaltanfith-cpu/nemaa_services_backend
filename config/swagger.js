@@ -306,6 +306,7 @@ const options = {
     path.join(__dirname, '../routes/stats.routes.js'),
     path.join(__dirname, '../routes/requests.routes.js'),
     path.join(__dirname, '../routes/staff.routes.js'),
+    path.join(__dirname, '../routes/contact.routes.js'),
     path.join(__dirname, '../routes/department.routes.js'),
     path.join(__dirname, '../routes/employee.routes.js'),
     path.join(__dirname, '../routes/task.routes.js'),

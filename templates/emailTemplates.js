@@ -33,6 +33,12 @@ const callout = (title, body, items = []) => `
       ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}
   </div>`;
 
+// A neutral block for text someone else wrote (e.g. a contact-form message), line breaks kept.
+const quote = (body) => `
+  <div style="margin:0 0 18px;padding:14px 16px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;">
+    <p style="margin:0;font-size:14px;line-height:1.9;color:#0f172a;white-space:pre-line;">${escapeHtml(body)}</p>
+  </div>`;
+
 const button = (label, url) => (safeUrl(url) ? `
   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 4px;">
     <tr><td style="border-radius:8px;background:${BRAND};">
@@ -158,4 +164,20 @@ export const newRequestStaffEmail = ({ staffName, ngoName, refCode, needTitle, t
           ${button('فتح الطلب في لوحة التحكم', url)}`,
     }),
     text: textOf([`مرحبًا ${staffName}،`, `طلب جديد ${refCode} من ${ngoName} على ${targetName}: ${needTitle}`, '', url]),
+});
+
+// ── Contact form (to the team inbox) ────────────────────────────────────────
+export const contactRequestEmail = ({ typeLabel, fullName, organizationName, email, phone, message, url }) => ({
+    subject: `رسالة جديدة من تواصل معنا: ${typeLabel} - ${fullName}`,
+    html: layout({
+        preheader: `${fullName} أرسل رسالة (${typeLabel}) من صفحة تواصل معنا`,
+        heading: 'رسالة جديدة من صفحة تواصل معنا',
+        body: `${details([['نوع الاستفسار', typeLabel], ['الاسم', fullName], ['الجمعية / الجهة', organizationName],
+            ['البريد الإلكتروني', email], ['الجوال / واتساب', phone]])}
+          ${quote(message)}
+          ${button('متابعة الرسالة في لوحة التحكم', url)}`,
+    }),
+    text: textOf([`رسالة جديدة من تواصل معنا (${typeLabel})`, '', `الاسم: ${fullName}`,
+        organizationName && `الجمعية / الجهة: ${organizationName}`, `البريد الإلكتروني: ${email}`,
+        phone && `الجوال / واتساب: ${phone}`, '', message, '', url]),
 });
