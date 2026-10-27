@@ -24,7 +24,7 @@ const toService = (row) => ({
     title: row.title,
     status: row.status,
     imageUrl: row.image_url,
-    price: Number(row.price),
+    price: row.price === null ? null : Number(row.price), // null = يحدد بعد الاجتماع
     requestCount: row.request_count,
     rating: Number(row.rating),
     responseTime: row.response_time,

@@ -47,7 +47,7 @@ export const update = handle('services update', 200, 'تم تحديث الخدم
     const before = savedInput(current);
     const service = await catalog.updateService(req.params.id, applyAllowedFields(req.user, req.body, before));
     const changes = changedFields(before, savedInput(service), FIELD_LABELS)
-        .map((label) => (label === FIELD_LABELS.price ? `السعر ${current.price} ← ${service.price}` : label));
+        .map((label) => (label === FIELD_LABELS.price ? `السعر ${current.price ?? 'يحدد بعد الاجتماع'} ← ${service.price ?? 'يحدد بعد الاجتماع'}` : label));
     await logActivity(null, {
         actorId: req.user.id, action: 'service.update', entityType: 'service', entityId: service.id,
         summary: `تعديل الخدمة «${service.title}»: ${describeChanges(changes)}`,

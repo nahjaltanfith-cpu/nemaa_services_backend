@@ -55,7 +55,8 @@ export const serviceSchema = Joi.object({
     status: Joi.string().valid(...SERVICE_STATUSES).default('active')
         .messages({ 'any.only': 'حالة الخدمة غير صالحة' }),
     imageUrl: optionalText(512),
-    price: Joi.number().min(0).max(9999999999.99).precision(2).default(0)
+    // null = no fixed price, shown as "يحدد بعد الاجتماع".
+    price: Joi.number().min(0).max(9999999999.99).precision(2).allow(null).default(0)
         .messages({ 'number.base': 'السعر يجب أن يكون رقمًا', 'number.min': 'السعر لا يمكن أن يكون سالبًا' }),
     duration: optionalText(100),
     categoryId: Joi.number().integer().positive().allow(null).default(null)
