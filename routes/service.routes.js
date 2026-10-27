@@ -20,13 +20,14 @@ const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
  *       type: object
  *       properties:
  *         id: { type: integer }
+ *         code: { type: string, nullable: true, pattern: "^[A-Z]{2,10}-[0-9]{1,4}$", description: Unique, e.g. GOV-01 }
  *         title: { type: string }
  *         status: { type: string, enum: [active, inactive, coming_soon] }
  *         imageUrl: { type: string, nullable: true, description: '/uploads/images/... or a website asset such as /images/services/01.png' }
  *         price: { type: number }
  *         requestCount: { type: integer }
  *         rating: { type: number }
- *         responseTime: { type: string, nullable: true }
+ *         responseTime: { type: string, description: Same for every service (خلال يومي عمل) }
  *         duration: { type: string, nullable: true }
  *         categoryId: { type: integer, nullable: true }
  *         category: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string } } }
@@ -42,11 +43,11 @@ const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
  *       type: object
  *       required: [title, fullDescription]
  *       properties:
+ *         code: { type: string, nullable: true, pattern: "^[A-Z]{2,10}-[0-9]{1,4}$", description: Unique, e.g. GOV-01 }
  *         title: { type: string }
  *         status: { type: string, enum: [active, inactive, coming_soon], default: active }
  *         imageUrl: { type: string, nullable: true }
  *         price: { type: number, minimum: 0 }
- *         responseTime: { type: string }
  *         duration: { type: string }
  *         categoryId: { type: integer, nullable: true }
  *         fullDescription: { type: string, minLength: 10 }
@@ -61,7 +62,6 @@ const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
  *         targetAudience: { type: array, items: { type: string } }
  *         includes: { type: array, items: { type: string } }
  *         requiredAttachments: { type: array, description: "Documents an NGO attaches; required = blocks submitting without it (a plain string = required)", items: { type: object, properties: { name: { type: string }, required: { type: boolean } } } }
- *         centerIds: { type: array, items: { type: string } }
  * /api/services:
  *   get:
  *     tags: [Services]
@@ -70,7 +70,7 @@ const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
  *     parameters:
  *       - { in: query, name: status, schema: { type: string, enum: [active, inactive, coming_soon] } }
  *       - { in: query, name: categoryId, schema: { type: integer } }
- *       - { in: query, name: search, schema: { type: string } }
+ *       - { in: query, name: search, schema: { type: string }, description: Matches the title or the code }
  *     responses:
  *       '200':
  *         description: Services

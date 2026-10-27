@@ -20,6 +20,7 @@ const SELECT = `
 
 const toService = (row) => ({
     id: row.id,
+    code: row.code,
     title: row.title,
     status: row.status,
     imageUrl: row.image_url,
@@ -45,9 +46,12 @@ const toService = (row) => ({
 const notFound = () => new HttpError(404, 'الخدمة غير موجودة', 'NOT_FOUND');
 
 const mapDbError = (error) => {
-    if (error.code !== '23503') return error;
-    if (error.constraint?.includes('category')) return new HttpError(400, 'التصنيف المختار غير موجود', 'CATEGORY_NOT_FOUND');
-    if (error.constraint === 'center_services_center_fkey') return new HttpError(400, 'أحد المراكز المختارة غير موجود', 'CENTER_NOT_FOUND');
+    if (error.code === '23505' && error.constraint === 'services_code_unique') {
+        return new HttpError(409, 'كود الخدمة مستخدم لخدمة أخرى', 'SERVICE_CODE_TAKEN');
+    }
+    if (error.code === '23503' && error.constraint?.includes('category')) {
+        return new HttpError(400, 'التصنيف المختار غير موجود', 'CATEGORY_NOT_FOUND');
+    }
     return error;
 };
 
@@ -69,12 +73,12 @@ export const listServices = async ({ includeHidden = false, status, categoryId, 
     const params = [];
     const add = (sql, value) => {
         params.push(value);
-        where.push(sql.replace('?', `$${params.length}`));
+        where.push(sql.replaceAll('?', `$${params.length}`));
     };
     if (!includeHidden) add('s.status = ANY(?::service_status[])', PUBLIC_STATUSES);
     if (status) add('s.status = ?', status);
     if (categoryId) add('s.category_id = ?', categoryId);
-    if (search) add('s.title ILIKE ?', `%${search.replace(/[%_\\]/g, '\\$&')}%`);
+    if (search) add('(s.title ILIKE ? OR s.code ILIKE ?)', `%${search.replace(/[%_\\]/g, '\\$&')}%`);
     const { rows } = await pool.query(
         `${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.id`,
         params
@@ -88,72 +92,48 @@ export const getService = async (id, { includeHidden = false } = {}) => {
     return toService(rows[0]);
 };
 
+// response_time is not written: every service gets the column default (migration 022).
+// Centers are linked from the center's side (center_services), never from the service form.
 const columnValues = (data) => [
-    data.title, data.status, data.imageUrl, data.price, data.responseTime, data.duration, data.categoryId,
+    data.title, data.status, data.imageUrl, data.price, data.code, data.duration, data.categoryId,
     data.fullDescription, data.shortDescription || buildShortDescription(data.fullDescription),
     JSON.stringify(data.outputs), JSON.stringify(data.workMethodology),
     JSON.stringify(data.targetAudience), JSON.stringify(data.includes), JSON.stringify(data.requiredAttachments),
 ];
 
-// Inside a transaction: replaces the service's centers with exactly `centerIds`.
-const replaceCenters = async (client, serviceId, centerIds) => {
-    await client.query('DELETE FROM center_services WHERE service_id = $1', [serviceId]);
-    if (centerIds.length) {
-        await client.query(
-            `INSERT INTO center_services (service_id, center_id)
-             SELECT $1, unnest($2::varchar[])`,
-            [serviceId, centerIds]
-        );
-    }
-};
-
-const inTransaction = async (work) => {
-    const client = await pool.connect();
+const query = async (sql, params) => {
     try {
-        await client.query('BEGIN');
-        const result = await work(client);
-        await client.query('COMMIT');
-        return result;
+        return await pool.query(sql, params);
     } catch (error) {
-        await client.query('ROLLBACK');
         throw mapDbError(error);
-    } finally {
-        client.release();
     }
 };
 
 export const createService = async (data) => {
     await assertValidImage(data.imageUrl);
-    const id = await inTransaction(async (client) => {
-        const { rows } = await client.query(
-            `INSERT INTO services (title, status, image_url, price, response_time, duration, category_id,
-                 full_description, short_description, outputs, work_methodology, target_audience, includes,
-                 required_attachments)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-             RETURNING id`,
-            columnValues(data)
-        );
-        await replaceCenters(client, rows[0].id, data.centerIds);
-        return rows[0].id;
-    });
-    return getService(id, { includeHidden: true });
+    const { rows } = await query(
+        `INSERT INTO services (title, status, image_url, price, code, duration, category_id,
+             full_description, short_description, outputs, work_methodology, target_audience, includes,
+             required_attachments)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING id`,
+        columnValues(data)
+    );
+    return getService(rows[0].id, { includeHidden: true });
 };
 
 export const updateService = async (id, data) => {
     await assertValidImage(data.imageUrl);
-    await inTransaction(async (client) => {
-        const { rowCount } = await client.query(
-            `UPDATE services SET title = $2, status = $3, image_url = $4, price = $5, response_time = $6,
-                 duration = $7, category_id = $8, full_description = $9, short_description = $10,
-                 outputs = $11, work_methodology = $12, target_audience = $13, includes = $14,
-                 required_attachments = $15,
-                 updated_at = NOW()
-             WHERE id = $1`,
-            [id, ...columnValues(data)]
-        );
-        if (!rowCount) throw notFound();
-        await replaceCenters(client, id, data.centerIds);
-    });
+    const { rowCount } = await query(
+        `UPDATE services SET title = $2, status = $3, image_url = $4, price = $5, code = $6,
+             duration = $7, category_id = $8, full_description = $9, short_description = $10,
+             outputs = $11, work_methodology = $12, target_audience = $13, includes = $14,
+             required_attachments = $15,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [id, ...columnValues(data)]
+    );
+    if (!rowCount) throw notFound();
     return getService(id, { includeHidden: true });
 };
 

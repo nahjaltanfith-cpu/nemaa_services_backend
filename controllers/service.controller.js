@@ -17,20 +17,19 @@ export const get = handle('services get', 200, 'تم جلب الخدمة',
 
 // The saved service in the form's shape (what applyAllowedFields falls back to).
 const savedInput = (service) => ({
-    title: service.title, status: service.status, imageUrl: service.imageUrl, price: service.price,
-    responseTime: service.responseTime, duration: service.duration, categoryId: service.categoryId,
+    code: service.code, title: service.title, status: service.status, imageUrl: service.imageUrl, price: service.price,
+    duration: service.duration, categoryId: service.categoryId,
     fullDescription: service.fullDescription, shortDescription: service.shortDescription,
     outputs: service.outputs, workMethodology: service.workMethodology, targetAudience: service.targetAudience,
     includes: service.includes, requiredAttachments: service.requiredAttachments,
-    centerIds: service.centers.map((center) => center.id),
 });
 
 // Field names for the activity log.
 const FIELD_LABELS = {
-    title: 'العنوان', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر', responseTime: 'وقت الاستجابة',
+    code: 'كود الخدمة', title: 'العنوان', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر',
     duration: 'مدة التنفيذ', categoryId: 'التصنيف', fullDescription: 'الوصف الكامل', shortDescription: 'الوصف المختصر',
-    outputs: 'المخرجات', workMethodology: 'منهجية العمل', targetAudience: 'الفئة المستهدفة', includes: 'ما تشمله الخدمة',
-    requiredAttachments: 'المرفقات المطلوبة', centerIds: 'المراكز',
+    outputs: 'المخرجات', workMethodology: 'منهجية العمل', targetAudience: 'الفئة المستهدفة', includes: 'ما تشمله الخدمة (النطاق)',
+    requiredAttachments: 'المرفقات المطلوبة',
 };
 
 // Creating needs manage:catalog (route); the price and form requirements still need their own rights.

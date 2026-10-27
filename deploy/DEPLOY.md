@@ -5,7 +5,7 @@
 | الريبو | ما يحدث |
 |---|---|
 | `nemaa_services_backend` | فحص الكود ← SSH ← `git reset` على `origin/main` ← `npm ci` ← `npm run migrate` ← `pm2 reload nemaa-backend` ← فحص أن الـ API يعمل |
-| `nemaa_services_Front` | `npm run build` على GitHub ← رفع `dist/` بـ rsync إلى `SITE_DIR` |
+| `nemaa_services_Front` | `npm run build` على GitHub ← رفع `dist/` بـ FTP إلى استضافة cPanel (مع `.htaccess` لروابط Vue Router) |
 | `nemaa_services_dashboard` | `npm run build` على GitHub ← رفع `dist/` بـ rsync إلى `DASHBOARD_DIR` |
 
 ## إعداد السيرفر (مرة واحدة)
@@ -28,15 +28,16 @@ pm2 start ecosystem.config.cjs && pm2 save
 ## إعداد GitHub (في كل ريبو)
 **Settings ← Secrets and variables ← Actions**
 
-Secrets (الثلاثة ريبوهات):
-- `HOSTINGER_SSH_HOST`, `HOSTINGER_SSH_USER`, `HOSTINGER_SSH_KEY` (المفتاح الخاص لمستخدم النشر؛ ضع المفتاح العام في `~/.ssh/authorized_keys` على السيرفر)
+Secrets:
+- backend و dashboard: `HOSTINGER_SSH_HOST`, `HOSTINGER_SSH_USER`, `HOSTINGER_SSH_KEY` (المفتاح الخاص لمستخدم النشر؛ ضع المفتاح العام في `~/.ssh/authorized_keys` على السيرفر)
 - اختياري: `HOSTINGER_SSH_PORT` (افتراضي 22)، `HOSTINGER_SSH_KNOWN_HOSTS` (ناتج `ssh-keyscan your-server` لتثبيت هوية السيرفر)
+- Front: `FTP_SERVER` (مثل `ftp.namaa.sa`)، `FTP_USERNAME`، `FTP_PASSWORD` — من cPanel ← FTP Accounts اعمل حساب FTP مجلده هو مجلد الموقع (مثل `public_html`)
 
 Variables:
 | الريبو | المتغيرات |
 |---|---|
 | backend | `BACKEND_DIR` (اختياري، افتراضي `/var/www/nemaa/backend`) |
-| Front | `VITE_API_BASE_URL` = `https://api.namaa.sa/api/v1`، `VITE_UPLOAD_URL` = `https://api.namaa.sa/api/upload`، `VITE_SOCKET_URL` (اختياري)، `SITE_DIR` (اختياري) |
+| Front | `VITE_API_BASE_URL` = `https://api.namaa.sa/api/v1`، `VITE_UPLOAD_URL` = `https://api.namaa.sa/api/upload`، `VITE_SOCKET_URL` (اختياري)، `FTP_SERVER_DIR` (اختياري، افتراضي `./`)، `FTP_PROTOCOL` (اختياري: `ftp` أو `ftps`، افتراضي `ftps`) |
 | dashboard | `VITE_API_BASE_URL` = `https://api.namaa.sa/api`، `VITE_SOCKET_URL` = `https://api.namaa.sa`، `VITE_SITE_URL` = `https://namaa.sa`، `DASHBOARD_DIR` (اختياري) |
 
 بناء الواجهات يتوقف برسالة واضحة إذا كان متغير ناقصًا أو ما زال `yourdomain`، فلا يُنشر بناء يشير لعنوان خاطئ.

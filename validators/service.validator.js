@@ -4,6 +4,7 @@ export const SERVICE_STATUSES = ['active', 'inactive', 'coming_soon'];
 export const MAX_LIST_ITEMS = 50;
 // Center ids are slugs (see enablement_centers.id).
 export const CENTER_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const SERVICE_CODE_PATTERN = /^[A-Z]{2,10}-[0-9]{1,4}$/;
 
 // A list of text items. Blank rows (an empty "+ add item" input) are dropped, not rejected.
 export const textList = (label) => Joi.array()
@@ -47,12 +48,15 @@ export const optionalText = (max) => Joi.string().trim().max(max).allow('', null
 export const serviceSchema = Joi.object({
     title: Joi.string().trim().min(2).max(255).required()
         .messages({ 'string.empty': 'عنوان الخدمة مطلوب', 'any.required': 'عنوان الخدمة مطلوب', 'string.min': 'عنوان الخدمة حرفين على الأقل' }),
+    // "GOV-01": letters, a dash, a number (same rule as services_code_format).
+    code: Joi.string().trim().uppercase().pattern(SERVICE_CODE_PATTERN).allow('', null).default(null)
+        .custom((value) => value || null)
+        .messages({ 'string.pattern.base': 'كود الخدمة يكون حروفًا إنجليزية ثم شرطة ثم رقم، مثل GOV-01' }),
     status: Joi.string().valid(...SERVICE_STATUSES).default('active')
         .messages({ 'any.only': 'حالة الخدمة غير صالحة' }),
     imageUrl: optionalText(512),
     price: Joi.number().min(0).max(9999999999.99).precision(2).default(0)
         .messages({ 'number.base': 'السعر يجب أن يكون رقمًا', 'number.min': 'السعر لا يمكن أن يكون سالبًا' }),
-    responseTime: optionalText(100),
     duration: optionalText(100),
     categoryId: Joi.number().integer().positive().allow(null).default(null)
         .messages({ 'number.base': 'التصنيف غير صالح' }),
@@ -66,9 +70,6 @@ export const serviceSchema = Joi.object({
     includes: textList('ما تشمله الخدمة'),
     // Documents the NGO attaches when requesting (names only, no files here).
     requiredAttachments: attachmentList,
-    centerIds: Joi.array().items(Joi.string().trim().pattern(CENTER_ID_PATTERN).max(100))
-        .unique().max(MAX_LIST_ITEMS).default([])
-        .messages({ 'array.unique': 'تم اختيار نفس المركز أكثر من مرة', 'string.pattern.base': 'معرّف مركز غير صالح' }),
 });
 
 export const serviceFilterSchema = Joi.object({
