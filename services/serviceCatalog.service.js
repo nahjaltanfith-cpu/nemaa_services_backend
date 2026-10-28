@@ -137,6 +137,13 @@ export const updateService = async (id, data) => {
     return getService(id, { includeHidden: true });
 };
 
+// Quick switch from the services list: only the status changes.
+export const updateServiceStatus = async (id, status) => {
+    const { rowCount } = await query('UPDATE services SET status = $2, updated_at = NOW() WHERE id = $1', [id, status]);
+    if (!rowCount) throw notFound();
+    return getService(id, { includeHidden: true });
+};
+
 // center_services rows go with it (ON DELETE CASCADE).
 export const deleteService = async (id) => {
     const { rowCount } = await pool.query('DELETE FROM services WHERE id = $1', [id]);

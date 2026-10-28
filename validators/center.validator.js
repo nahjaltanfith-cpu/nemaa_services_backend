@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { MAX_LIST_ITEMS, methodology, optionalText, textList } from './service.validator.js';
+import { MAX_LIST_ITEMS, methodology, optionalText, textList, titledList } from './service.validator.js';
 
 export const CENTER_STATUSES = ['active', 'inactive', 'coming_soon'];
 
@@ -22,6 +22,8 @@ export const centerSchema = Joi.object({
     outputs: textList('المخرجات'),
     methodology,
     targetAudience: textList('الفئة المستهدفة'),
+    // Parts of the center that are not catalog services: shown on the center page only.
+    extraServices: titledList('خدمات ضمن المركز', 'خدمة'),
     serviceIds: Joi.array().items(Joi.number().integer().positive())
         .unique().max(MAX_LIST_ITEMS).default([])
         .messages({ 'array.unique': 'تم اختيار نفس الخدمة أكثر من مرة', 'number.base': 'معرّف خدمة غير صالح' }),

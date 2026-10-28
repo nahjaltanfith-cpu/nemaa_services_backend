@@ -53,6 +53,10 @@ const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
  *               rating: { type: number }
  *               shortDescription: { type: string }
  *         serviceIds: { type: array, items: { type: integer } }
+ *         extraServices:
+ *           type: array
+ *           description: The center's own parts that are not catalog services (center page only, not requestable alone)
+ *           items: { type: object, properties: { title: { type: string }, description: { type: string } } }
  *     CenterInput:
  *       type: object
  *       required: [title, overview]
@@ -74,6 +78,12 @@ const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
  *               - { type: object, required: [title], properties: { title: { type: string }, description: { type: string } } }
  *         targetAudience: { type: array, items: { type: string } }
  *         serviceIds: { type: array, items: { type: integer } }
+ *         extraServices:
+ *           type: array
+ *           items:
+ *             oneOf:
+ *               - { type: string }
+ *               - { type: object, required: [title], properties: { title: { type: string }, description: { type: string } } }
  * /api/centers:
  *   get:
  *     tags: [Centers]

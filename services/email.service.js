@@ -12,7 +12,7 @@ import { otpEmail } from '../templates/emailTemplates.js';
 const RETRY_DELAY_MS = 5000;
 
 const smtpConfigured = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-const sender = () => process.env.SENDER_EMAIL || 'Nemaa Platform <info@namaa.sa>';
+const sender = () => process.env.SENDER_EMAIL || 'منصة كفاءة <no-reply@naama.org.sa>';
 
 let transporter = null;
 const getTransporter = () => {

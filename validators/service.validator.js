@@ -14,18 +14,20 @@ export const textList = (label) => Joi.array()
     .custom((items) => items.filter(Boolean))
     .messages({ 'array.base': `${label} يجب أن تكون قائمة`, 'array.max': `${label}: الحد الأقصى ${MAX_LIST_ITEMS} عنصرًا` });
 
-// Methodology steps: { title, description }. A plain string is accepted as a title-only step.
-const step = Joi.alternatives().try(
+// A list of { title, description } items (methodology steps, a center's own services). A plain string
+// is accepted as a title-only item; rows without a title are dropped.
+export const titledList = (label, unit) => Joi.array().items(Joi.alternatives().try(
     Joi.string().trim().allow('').max(200).custom((title) => ({ title, description: '' })),
     Joi.object({
         title: Joi.string().trim().allow('').max(200).required(),
         description: Joi.string().trim().allow('').max(1000).default(''),
     }),
-).messages({ 'alternatives.match': 'خطوة غير صالحة في منهجية العمل' });
+).messages({ 'alternatives.match': `${unit} غير صالحة في ${label}` }))
+    .max(MAX_LIST_ITEMS).default([])
+    .custom((items) => items.filter((item) => item.title))
+    .messages({ 'array.base': `${label} يجب أن تكون قائمة`, 'array.max': `${label}: الحد الأقصى ${MAX_LIST_ITEMS} ${unit}` });
 
-export const methodology = Joi.array().items(step).max(MAX_LIST_ITEMS).default([])
-    .custom((steps) => steps.filter((item) => item.title))
-    .messages({ 'array.base': 'منهجية العمل يجب أن تكون قائمة', 'array.max': `منهجية العمل: الحد الأقصى ${MAX_LIST_ITEMS} خطوة` });
+export const methodology = titledList('منهجية العمل', 'خطوة');
 
 // Request attachments: { name, required }. required = the request can't be submitted without it.
 // A plain string is accepted as a required document. Rows without a name are dropped.
@@ -41,16 +43,17 @@ const attachmentList = Joi.array().items(attachment).max(MAX_LIST_ITEMS).default
     .custom((items) => items.filter((item) => item.name))
     .messages({ 'array.base': 'المرفقات المطلوبة يجب أن تكون قائمة', 'array.max': `المرفقات المطلوبة: الحد الأقصى ${MAX_LIST_ITEMS} مرفقًا` });
 
-export const optionalText = (max) => Joi.string().trim().max(max).allow('', null).default(null)
-    .custom((value) => value || null);
+// empty(''): a blank field ('' or spaces) becomes null. allow('') + custom() can't do it: Joi skips custom()
+// for allowed values, so '' reached the database.
+export const optionalText = (max) => Joi.string().trim().max(max).empty('').allow(null).default(null);
 
 // Create and update share the schema: the admin form always sends the full service.
 export const serviceSchema = Joi.object({
     title: Joi.string().trim().min(2).max(255).required()
         .messages({ 'string.empty': 'عنوان الخدمة مطلوب', 'any.required': 'عنوان الخدمة مطلوب', 'string.min': 'عنوان الخدمة حرفين على الأقل' }),
     // "GOV-01": letters, a dash, a number (same rule as services_code_format).
-    code: Joi.string().trim().uppercase().pattern(SERVICE_CODE_PATTERN).allow('', null).default(null)
-        .custom((value) => value || null)
+    // A blank code → null (services_code_format rejects '').
+    code: Joi.string().trim().uppercase().pattern(SERVICE_CODE_PATTERN).empty('').allow(null).default(null)
         .messages({ 'string.pattern.base': 'كود الخدمة يكون حروفًا إنجليزية ثم شرطة ثم رقم، مثل GOV-01' }),
     status: Joi.string().valid(...SERVICE_STATUSES).default('active')
         .messages({ 'any.only': 'حالة الخدمة غير صالحة' }),
@@ -71,6 +74,11 @@ export const serviceSchema = Joi.object({
     includes: textList('ما تشمله الخدمة'),
     // Documents the NGO attaches when requesting (names only, no files here).
     requiredAttachments: attachmentList,
+});
+
+export const serviceStatusSchema = Joi.object({
+    status: Joi.string().valid(...SERVICE_STATUSES).required()
+        .messages({ 'any.only': 'حالة غير صالحة', 'any.required': 'الحالة مطلوبة' }),
 });
 
 export const serviceFilterSchema = Joi.object({

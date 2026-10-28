@@ -56,6 +56,21 @@ export const update = handle('services update', 200, 'تم تحديث الخدم
     return service;
 });
 
+const STATUS_LABELS = { active: 'مفعّلة', inactive: 'غير مفعّلة', coming_soon: 'قريبًا' };
+
+// The switch in the services list (status only; same right as the status field in the form).
+export const updateStatus = handle('services status', 200, 'تم تحديث حالة الخدمة', async (req) => {
+    const current = await catalog.getService(req.params.id, { includeHidden: true });
+    if (current.status === req.body.status) return current;
+    const service = await catalog.updateServiceStatus(req.params.id, req.body.status);
+    await logActivity(null, {
+        actorId: req.user.id, action: 'service.update', entityType: 'service', entityId: service.id,
+        summary: `تغيير حالة الخدمة «${service.title}» من «${STATUS_LABELS[current.status]}» إلى «${STATUS_LABELS[service.status]}»`,
+        details: { status: { from: current.status, to: service.status } },
+    });
+    return service;
+});
+
 export const remove = handle('services delete', 200, 'تم حذف الخدمة', async (req) => {
     const current = await catalog.getService(req.params.id, { includeHidden: true });
     const result = await catalog.deleteService(req.params.id);

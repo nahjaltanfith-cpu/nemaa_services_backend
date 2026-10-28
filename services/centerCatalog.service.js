@@ -34,6 +34,8 @@ const toCenter = (row) => ({
     outputs: row.outputs,
     methodology: row.methodology,
     targetAudience: row.target_audience,
+    // Not catalog services: no id, no page, not requestable on their own.
+    extraServices: row.extra_services,
     services: row.services,
     serviceIds: row.services.map((service) => service.id),
     createdAt: row.created_at,
@@ -80,6 +82,7 @@ const columnValues = (data) => [
     data.title, data.status, data.imageUrl, data.price, data.responseTime, data.executionDuration,
     data.overview, data.shortDescription || buildShortDescription(data.overview),
     JSON.stringify(data.outputs), JSON.stringify(data.methodology), JSON.stringify(data.targetAudience),
+    JSON.stringify(data.extraServices ?? []),
 ];
 
 // Inside a transaction: replaces the center's services with exactly `serviceIds`.
@@ -114,8 +117,9 @@ export const createCenter = async (data) => {
     const id = await inTransaction(async (client) => {
         const { rows } = await client.query(
             `INSERT INTO enablement_centers (title, status, image_url, price, response_time,
-                 execution_duration, overview, short_description, outputs, methodology, target_audience)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                 execution_duration, overview, short_description, outputs, methodology, target_audience,
+                 extra_services)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING id`,
             columnValues(data)
         );
@@ -131,7 +135,7 @@ export const updateCenter = async (id, data) => {
         const { rowCount } = await client.query(
             `UPDATE enablement_centers SET title = $2, status = $3, image_url = $4, price = $5,
                  response_time = $6, execution_duration = $7, overview = $8, short_description = $9,
-                 outputs = $10, methodology = $11, target_audience = $12, updated_at = NOW()
+                 outputs = $10, methodology = $11, target_audience = $12, extra_services = $13, updated_at = NOW()
              WHERE id = $1`,
             [id, ...columnValues(data)]
         );

@@ -3,7 +3,7 @@
 // plain-text version for clients that don't show HTML. Every interpolated value is escaped.
 
 const BRAND = '#00262D';
-const PLATFORM = 'منصة نماء';
+const PLATFORM = 'منصة كفاءة';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -78,7 +78,7 @@ const textOf = (lines) => [...lines.filter(Boolean), '', `— ${PLATFORM} (رس�
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 const OTP_PURPOSES = {
-    verify_email: { subject: 'رمز تأكيد البريد الإلكتروني', intro: 'استخدم الرمز التالي لتأكيد بريدك الإلكتروني في منصة نماء:' },
+    verify_email: { subject: 'رمز تأكيد البريد الإلكتروني', intro: 'استخدم الرمز التالي لتأكيد بريدك الإلكتروني في منصة كفاءة:' },
     reset_password: { subject: 'رمز استعادة كلمة المرور', intro: 'استخدم الرمز التالي لتعيين كلمة مرور جديدة لحسابك:' },
 };
 
@@ -117,10 +117,10 @@ export const ngoApprovedEmail = ({ ngoName, url }) => ({
         preheader: 'حسابكم معتمد ويمكنكم الآن تقديم الطلبات',
         heading: 'تم اعتماد حساب الجمعية',
         body: `${paragraph(`مرحبًا ${ngoName}،`)}
-          ${paragraph('يسعدنا إبلاغكم باعتماد حساب جمعيتكم في منصة نماء. يمكنكم الآن تقديم طلبات الخدمات ومراكز التمكين ومتابعتها.')}
+          ${paragraph('يسعدنا إبلاغكم باعتماد حساب جمعيتكم في منصة كفاءة. يمكنكم الآن تقديم طلبات الخدمات ومراكز التمكين ومتابعتها.')}
           ${button('الدخول إلى المنصة', url)}`,
     }),
-    text: textOf([`مرحبًا ${ngoName}،`, 'تم اعتماد حساب جمعيتكم في منصة نماء، ويمكنكم الآن تقديم الطلبات.', '', url]),
+    text: textOf([`مرحبًا ${ngoName}،`, 'تم اعتماد حساب جمعيتكم في منصة كفاءة، ويمكنكم الآن تقديم الطلبات.', '', url]),
 });
 
 // ── Service requests (to the NGO) ───────────────────────────────────────────

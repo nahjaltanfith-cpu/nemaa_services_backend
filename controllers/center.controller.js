@@ -20,7 +20,7 @@ const savedInput = (center) => ({
     title: center.title, status: center.status, imageUrl: center.imageUrl, price: center.price,
     responseTime: center.responseTime, executionDuration: center.executionDuration, overview: center.overview,
     shortDescription: center.shortDescription, outputs: center.outputs, methodology: center.methodology,
-    targetAudience: center.targetAudience, serviceIds: center.serviceIds,
+    targetAudience: center.targetAudience, extraServices: center.extraServices, serviceIds: center.serviceIds,
 });
 
 // Field names for the activity log.
@@ -28,6 +28,7 @@ const FIELD_LABELS = {
     title: 'الاسم', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر', responseTime: 'وقت الاستجابة',
     executionDuration: 'مدة التنفيذ', overview: 'النظرة العامة', shortDescription: 'الوصف المختصر',
     outputs: 'المخرجات', methodology: 'منهجية العمل', targetAudience: 'الفئة المستهدفة', serviceIds: 'الخدمات',
+    extraServices: 'خدمات ضمن المركز',
 };
 
 // Creating needs manage:catalog (route); the price still needs manage:pricing.
