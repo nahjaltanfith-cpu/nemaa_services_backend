@@ -52,7 +52,7 @@ const mapDbError = (error) => {
 };
 
 /**
- * Centers in seed/creation order. Visitors never see 'inactive' ones; admins (includeHidden)
+ * Centers in seed/creation order, 'coming_soon' last. Visitors never see 'inactive' ones; admins (includeHidden)
  * see all and may filter by any status.
  */
 export const listCenters = async ({ includeHidden = false, status, search } = {}) => {
@@ -66,7 +66,7 @@ export const listCenters = async ({ includeHidden = false, status, search } = {}
     if (status) add('ce.status = ?', status);
     if (search) add('ce.title ILIKE ?', `%${search.replace(/[%_\\]/g, '\\$&')}%`);
     const { rows } = await pool.query(
-        `${select(includeHidden)} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ce.created_at, ce.id`,
+        `${select(includeHidden)} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ce.status = 'coming_soon', ce.created_at, ce.id`,
         params
     );
     return rows.map(toCenter);
@@ -142,6 +142,13 @@ export const updateCenter = async (id, data) => {
         if (!rowCount) throw notFound();
         await replaceServices(client, id, data.serviceIds);
     });
+    return getCenter(id, { includeHidden: true });
+};
+
+// Quick switch from the centers list: only the status changes.
+export const updateCenterStatus = async (id, status) => {
+    const { rowCount } = await pool.query('UPDATE enablement_centers SET status = $2, updated_at = NOW() WHERE id = $1', [id, status]);
+    if (!rowCount) throw notFound();
     return getCenter(id, { includeHidden: true });
 };
 

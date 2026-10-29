@@ -4,7 +4,7 @@ import { CATALOG_EDIT, P } from '../config/permissions.js';
 import { authenticate, optionalAuth, requireAnyPermission, requirePermission } from '../middlewares/auth.middleware.js';
 import { parseSlugParam } from '../middlewares/params.middleware.js';
 import { validateBody } from '../middlewares/validate.middleware.js';
-import { centerSchema } from '../validators/center.validator.js';
+import { centerSchema, centerStatusSchema } from '../validators/center.validator.js';
 
 const router = Router();
 // Create / delete: manage:catalog. Update: any catalog right — the controller applies only the fields
@@ -133,11 +133,31 @@ const editors = [authenticate, requireAnyPermission(...CATALOG_EDIT)];
  *     responses:
  *       '200': { description: '{ id }' }
  *       '404': { $ref: '#/components/responses/NotFound' }
+ * /api/centers/{id}/status:
+ *   patch:
+ *     tags: [Centers]
+ *     summary: Change only the status — the switch in the centers list (manage:catalog)
+ *     parameters: [{ $ref: '#/components/parameters/CenterIdParam' }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [active, inactive, coming_soon] }
+ *     responses:
+ *       '200': { description: Updated center }
+ *       '400': { $ref: '#/components/responses/BadRequest' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
  */
 router.get('/', optionalAuth, controller.list);
 router.get('/:id', optionalAuth, parseSlugParam(), controller.get);
 router.post('/', ...adminOnly, validateBody(centerSchema), controller.create);
 router.put('/:id', ...editors, parseSlugParam(), validateBody(centerSchema), controller.update);
+// Status is a manage:catalog field (utils/catalogFields.js), so the switch needs that right too.
+router.patch('/:id/status', ...adminOnly, parseSlugParam(), validateBody(centerStatusSchema), controller.updateStatus);
 router.delete('/:id', ...adminOnly, parseSlugParam(), controller.remove);
 
 export default router;

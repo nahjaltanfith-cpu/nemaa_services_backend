@@ -61,6 +61,9 @@ export const serviceSchema = Joi.object({
     // null = no fixed price, shown as "يحدد بعد الاجتماع".
     price: Joi.number().min(0).max(9999999999.99).precision(2).allow(null).default(0)
         .messages({ 'number.base': 'السعر يجب أن يكون رقمًا', 'number.min': 'السعر لا يمكن أن يكون سالبًا' }),
+    // Free for now (e.g. launch): the price is kept, the website shows the service as free.
+    isFree: Joi.boolean().default(false)
+        .messages({ 'boolean.base': 'خيار "مجانية حاليًا" غير صالح' }),
     duration: optionalText(100),
     categoryId: Joi.number().integer().positive().allow(null).default(null)
         .messages({ 'number.base': 'التصنيف غير صالح' }),

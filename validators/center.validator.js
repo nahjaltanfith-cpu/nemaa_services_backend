@@ -29,6 +29,12 @@ export const centerSchema = Joi.object({
         .messages({ 'array.unique': 'تم اختيار نفس الخدمة أكثر من مرة', 'number.base': 'معرّف خدمة غير صالح' }),
 });
 
+// The switch in the centers list: only the status changes.
+export const centerStatusSchema = Joi.object({
+    status: Joi.string().valid(...CENTER_STATUSES).required()
+        .messages({ 'any.only': 'حالة غير صالحة', 'any.required': 'الحالة مطلوبة' }),
+});
+
 export const centerFilterSchema = Joi.object({
     status: Joi.string().valid(...CENTER_STATUSES),
     search: Joi.string().trim().max(100).allow(''),

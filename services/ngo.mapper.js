@@ -11,7 +11,8 @@ export const ACCOUNT_STATUSES = ['new', 'under_review', 'needs_documents', 'appr
 // Columns behind toPublicNgo. Usable in SELECT and in UPDATE … RETURNING on `ngos`.
 export const NGO_COLUMNS = `id, ngo_name, reg_number, field_of_work, representative_name,
     position, email, mobile, account_status, ngo_document_key, representative_proof_key,
-    admin_notes, status_updated_at, status_seen_at, conversation_open, created_at,
+    admin_notes, status_updated_at, status_seen_at, conversation_open, created_at, region_id, avatar_url,
+    (SELECT r.name FROM regions r WHERE r.id = ngos.region_id) AS region_name,
     (SELECT COUNT(*) FROM ngo_messages m
       WHERE m.ngo_id = ngos.id AND m.sender_type = 'admin' AND m.read_at IS NULL) AS unread_from_admin,
     (SELECT COUNT(*) FROM ngo_messages m
@@ -25,6 +26,11 @@ export const toPublicNgo = (row, viewer = 'ngo') => ({
     ngoName: row.ngo_name,
     regNumber: row.reg_number,
     fieldOfWork: row.field_of_work,
+    // null for NGOs registered before the region field
+    regionId: row.region_id,
+    regionName: row.region_name,
+    // /uploads/images/... or null (no picture)
+    avatarUrl: row.avatar_url,
     representativeName: row.representative_name,
     position: row.position,
     email: row.email,

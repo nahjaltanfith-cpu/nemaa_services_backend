@@ -4,6 +4,7 @@ import { hasPermission } from '../middlewares/auth.middleware.js';
 // Catalog fields guarded by their own permission; every other field needs manage:catalog.
 const FIELD_PERMISSIONS = {
     price: P.MANAGE_PRICING,
+    isFree: P.MANAGE_PRICING,
     requiredAttachments: P.MANAGE_FORM_CONFIGS,
 };
 

@@ -62,11 +62,12 @@ const router = Router();
  *             properties:
  *               ngo:
  *                 type: object
- *                 required: [ngoName, regNumber, fieldOfWork]
+ *                 required: [ngoName, regNumber, fieldOfWork, regionId]
  *                 properties:
  *                   ngoName: { type: string, minLength: 3 }
  *                   regNumber: { type: string, description: 4-10 digits }
  *                   fieldOfWork: { type: string }
+ *                   regionId: { type: integer, description: 'id from GET /api/regions' }
  *               representative:
  *                 type: object
  *                 required: [representativeName, email, mobile, password]

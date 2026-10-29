@@ -104,6 +104,8 @@ const toMessage = (row) => ({
     requestId: row.request_id,
     senderType: row.sender_type,
     senderName: row.sender_name,
+    // The NGO's picture on its own messages; team messages have none (null)
+    senderAvatar: row.sender_avatar,
     body: row.body,
     createdAt: row.created_at,
     readAt: row.read_at,
@@ -583,7 +585,8 @@ export const assignRequest = async (id, actor, assigneeId) => {
 
 // ── Conversation per request ────────────────────────────────────────────────
 const MESSAGE_SELECT = `SELECT m.*,
-        CASE WHEN m.sender_type = 'admin' THEN COALESCE(u.name, 'فريق نماء') ELSE n.ngo_name END AS sender_name
+        CASE WHEN m.sender_type = 'admin' THEN COALESCE(u.name, 'فريق نماء') ELSE n.ngo_name END AS sender_name,
+        CASE WHEN m.sender_type = 'admin' THEN NULL ELSE n.avatar_url END AS sender_avatar
     FROM request_messages m
     JOIN service_requests r ON r.id = m.request_id
     JOIN ngos n ON n.id = r.ngo_id

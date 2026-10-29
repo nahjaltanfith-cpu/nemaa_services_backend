@@ -55,6 +55,20 @@ export const update = handle('centers update', 200, 'تم تحديث المرك�
     return center;
 });
 
+const STATUS_LABELS = { active: 'مفعّل', inactive: 'غير مفعّل', coming_soon: 'قريبًا' };
+
+export const updateStatus = handle('centers status', 200, 'تم تحديث حالة المركز', async (req) => {
+    const current = await catalog.getCenter(req.params.id, { includeHidden: true });
+    if (current.status === req.body.status) return current;
+    const center = await catalog.updateCenterStatus(req.params.id, req.body.status);
+    await logActivity(null, {
+        actorId: req.user.id, action: 'center.update', entityType: 'center', entityId: center.id,
+        summary: `تغيير حالة المركز «${center.title}» من «${STATUS_LABELS[current.status]}» إلى «${STATUS_LABELS[center.status]}»`,
+        details: { status: { from: current.status, to: center.status } },
+    });
+    return center;
+});
+
 export const remove = handle('centers delete', 200, 'تم حذف المركز', async (req) => {
     const current = await catalog.getCenter(req.params.id, { includeHidden: true });
     const result = await catalog.deleteCenter(req.params.id);

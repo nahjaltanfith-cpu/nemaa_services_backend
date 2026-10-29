@@ -10,13 +10,16 @@ const toMessage = (row) => ({
     ngoId: row.ngo_id,
     senderType: row.sender_type,
     senderName: row.sender_name,
+    // The NGO's picture on its own messages; team messages have none (null)
+    senderAvatar: row.sender_avatar,
     body: row.body,
     createdAt: row.created_at,
     readAt: row.read_at,
 });
 
 const MESSAGE_SELECT = `SELECT m.id, m.ngo_id, m.sender_type, m.body, m.created_at, m.read_at,
-        CASE WHEN m.sender_type = 'admin' THEN COALESCE(u.name, 'فريق نماء') ELSE n.ngo_name END AS sender_name
+        CASE WHEN m.sender_type = 'admin' THEN COALESCE(u.name, 'فريق نماء') ELSE n.ngo_name END AS sender_name,
+        CASE WHEN m.sender_type = 'admin' THEN NULL ELSE n.avatar_url END AS sender_avatar
     FROM ngo_messages m
     JOIN ngos n ON n.id = m.ngo_id
     LEFT JOIN users u ON u.id = m.sender_user_id`;

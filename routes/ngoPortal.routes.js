@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as controller from '../controllers/ngoPortal.controller.js';
 import { NGO_ROLE, authenticate, checkRole } from '../middlewares/auth.middleware.js';
 import { validateBody } from '../middlewares/validate.middleware.js';
+import { singleImage } from '../services/upload.service.js';
 import { messageSchema, profileUpdateSchema } from '../validators/review.validator.js';
 
 const router = Router();
@@ -69,6 +70,9 @@ router.use(authenticate, checkRole(NGO_ROLE));
  *       '200': { description: '{ marked }' }
  */
 router.put('/profile', validateBody(profileUpdateSchema), controller.updateProfile);
+// Profile picture (multipart field "file"): shown next to the NGO's chat messages
+router.post('/avatar', singleImage('file'), controller.uploadAvatar);
+router.delete('/avatar', controller.removeAvatar);
 router.post('/resubmit', controller.resubmit);
 router.post('/status/seen', controller.markStatusSeen);
 router.get('/messages', controller.listMessages);

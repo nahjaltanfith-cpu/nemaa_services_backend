@@ -18,7 +18,7 @@ export const get = handle('services get', 200, 'تم جلب الخدمة',
 // The saved service in the form's shape (what applyAllowedFields falls back to).
 const savedInput = (service) => ({
     code: service.code, title: service.title, status: service.status, imageUrl: service.imageUrl, price: service.price,
-    duration: service.duration, categoryId: service.categoryId,
+    isFree: service.isFree, duration: service.duration, categoryId: service.categoryId,
     fullDescription: service.fullDescription, shortDescription: service.shortDescription,
     outputs: service.outputs, workMethodology: service.workMethodology, targetAudience: service.targetAudience,
     includes: service.includes, requiredAttachments: service.requiredAttachments,
@@ -26,7 +26,7 @@ const savedInput = (service) => ({
 
 // Field names for the activity log.
 const FIELD_LABELS = {
-    code: 'كود الخدمة', title: 'العنوان', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر',
+    code: 'كود الخدمة', title: 'العنوان', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر', isFree: 'مجانية حاليًا',
     duration: 'مدة التنفيذ', categoryId: 'التصنيف', fullDescription: 'الوصف الكامل', shortDescription: 'الوصف المختصر',
     outputs: 'المخرجات', workMethodology: 'منهجية العمل', targetAudience: 'الفئة المستهدفة', includes: 'ما تشمله الخدمة (النطاق)',
     requiredAttachments: 'المرفقات المطلوبة',
@@ -34,7 +34,7 @@ const FIELD_LABELS = {
 
 // Creating needs manage:catalog (route); the price and form requirements still need their own rights.
 export const create = handle('services create', 201, 'تم إنشاء الخدمة', async (req) => {
-    const service = await catalog.createService(applyAllowedFields(req.user, req.body, { ...req.body, price: 0, requiredAttachments: [] }));
+    const service = await catalog.createService(applyAllowedFields(req.user, req.body, { ...req.body, price: 0, isFree: false, requiredAttachments: [] }));
     await logActivity(null, {
         actorId: req.user.id, action: 'service.create', entityType: 'service', entityId: service.id,
         summary: `إضافة الخدمة «${service.title}» (السعر ${service.price})`, details: { status: service.status, price: service.price },
@@ -47,7 +47,11 @@ export const update = handle('services update', 200, 'تم تحديث الخدم
     const before = savedInput(current);
     const service = await catalog.updateService(req.params.id, applyAllowedFields(req.user, req.body, before));
     const changes = changedFields(before, savedInput(service), FIELD_LABELS)
-        .map((label) => (label === FIELD_LABELS.price ? `السعر ${current.price ?? 'يحدد بعد الاجتماع'} ← ${service.price ?? 'يحدد بعد الاجتماع'}` : label));
+        .map((label) => {
+            if (label === FIELD_LABELS.price) return `السعر ${current.price ?? 'يحدد بعد الاجتماع'} ← ${service.price ?? 'يحدد بعد الاجتماع'}`;
+            if (label === FIELD_LABELS.isFree) return service.isFree ? 'تفعيل الخدمة مجانًا' : 'إلغاء المجانية';
+            return label;
+        });
     await logActivity(null, {
         actorId: req.user.id, action: 'service.update', entityType: 'service', entityId: service.id,
         summary: `تعديل الخدمة «${service.title}»: ${describeChanges(changes)}`,

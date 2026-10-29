@@ -25,6 +25,7 @@ const toService = (row) => ({
     status: row.status,
     imageUrl: row.image_url,
     price: row.price === null ? null : Number(row.price), // null = يحدد بعد الاجتماع
+    isFree: row.is_free, // مجانية حاليًا: السعر محفوظ بس الخدمة بتتعرض مجانًا
     requestCount: row.request_count,
     rating: Number(row.rating),
     responseTime: row.response_time,
@@ -65,7 +66,7 @@ export const assertValidImage = async (imageUrl) => {
 };
 
 /**
- * Services newest first. Visitors never see 'inactive' ones; admins (includeHidden) see all
+ * Services in id order, 'coming_soon' last. Visitors never see 'inactive' ones; admins (includeHidden) see all
  * and may filter by any status.
  */
 export const listServices = async ({ includeHidden = false, status, categoryId, search } = {}) => {
@@ -80,7 +81,7 @@ export const listServices = async ({ includeHidden = false, status, categoryId, 
     if (categoryId) add('s.category_id = ?', categoryId);
     if (search) add('(s.title ILIKE ? OR s.code ILIKE ?)', `%${search.replace(/[%_\\]/g, '\\$&')}%`);
     const { rows } = await pool.query(
-        `${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.id`,
+        `${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY s.status = 'coming_soon', s.id`,
         params
     );
     return rows.map(toService);
@@ -99,6 +100,7 @@ const columnValues = (data) => [
     data.fullDescription, data.shortDescription || buildShortDescription(data.fullDescription),
     JSON.stringify(data.outputs), JSON.stringify(data.workMethodology),
     JSON.stringify(data.targetAudience), JSON.stringify(data.includes), JSON.stringify(data.requiredAttachments),
+    data.isFree,
 ];
 
 const query = async (sql, params) => {
@@ -114,8 +116,8 @@ export const createService = async (data) => {
     const { rows } = await query(
         `INSERT INTO services (title, status, image_url, price, code, duration, category_id,
              full_description, short_description, outputs, work_methodology, target_audience, includes,
-             required_attachments)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             required_attachments, is_free)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING id`,
         columnValues(data)
     );
@@ -128,7 +130,7 @@ export const updateService = async (id, data) => {
         `UPDATE services SET title = $2, status = $3, image_url = $4, price = $5, code = $6,
              duration = $7, category_id = $8, full_description = $9, short_description = $10,
              outputs = $11, work_methodology = $12, target_audience = $13, includes = $14,
-             required_attachments = $15,
+             required_attachments = $15, is_free = $16,
              updated_at = NOW()
          WHERE id = $1`,
         [id, ...columnValues(data)]

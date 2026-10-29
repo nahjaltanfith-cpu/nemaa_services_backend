@@ -103,17 +103,19 @@ export const registerNgo = async ({ ngo, representative, documents }) => {
             `INSERT INTO ngos (ngo_name, reg_number, field_of_work, representative_name,
                  position, email, mobile, password, account_status,
                  ngo_document_key, representative_proof_key,
-                 otp_code, otp_purpose, otp_expires_at, otp_attempts, otp_sent_at)
+                 otp_code, otp_purpose, otp_expires_at, otp_attempts, otp_sent_at, region_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                 $12, 'verify_email', NOW() + make_interval(mins => $13), 0, NOW())
+                 $12, 'verify_email', NOW() + make_interval(mins => $13), 0, NOW(), $14)
              RETURNING id`,
             [ngo.ngoName, ngo.regNumber, ngo.fieldOfWork, representative.representativeName,
                 representative.position || null, representative.email, representative.mobile,
                 passwordHash, accountStatus, keys.ngo_document_key, keys.representative_proof_key,
-                hashOtp(code), OTP_TTL_MINUTES]
+                hashOtp(code), OTP_TTL_MINUTES, ngo.regionId]
         );
         ngoId = rows[0].id;
     } catch (error) {
+        // region_id points to a region that doesn't exist
+        if (error.code === '23503') throw new HttpError(400, 'المنطقة المختارة غير صالحة', 'REGION_NOT_FOUND');
         throw uniqueViolation(error);
     }
     await deliverOtp(representative.email, code, 'verify_email');
@@ -224,6 +226,17 @@ export const updateNgoProfile = async (id, changes) => {
     } catch (error) {
         throw uniqueViolation(error);
     }
+};
+
+/** Sets (fileUrl from saveImage) or clears (null) the NGO's profile picture. */
+export const setNgoAvatar = async (id, avatarUrl) => {
+    const { rows } = await pool.query(
+        `UPDATE ngos SET avatar_url = $2, updated_at = NOW() WHERE id = $1 RETURNING ${NGO_COLUMNS}`,
+        [id, avatarUrl]
+    );
+    if (!rows.length) throw new HttpError(404, 'الحساب غير موجود', 'NOT_FOUND');
+    emitToAdmins(EVENTS.NGO_UPDATED, { ngoId: id });
+    return toPublicNgo(rows[0]);
 };
 
 /** After fixing what the admin asked for, the NGO sends the file back to review. */
