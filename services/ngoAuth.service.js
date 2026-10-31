@@ -200,10 +200,9 @@ export const attachNgoDocument = async (id, documentType, key) => {
     return toPublicNgo(rows[0]);
 };
 
-// Fields an NGO may correct itself. The email is the login identity and stays fixed.
+// Fields an NGO may correct itself. The email (login identity), the NGO name and the registration
+// number are official records and stay fixed.
 const PROFILE_FIELDS = {
-    ngoName: 'ngo_name',
-    regNumber: 'reg_number',
     fieldOfWork: 'field_of_work',
     representativeName: 'representative_name',
     position: 'position',

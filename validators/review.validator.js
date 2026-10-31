@@ -36,10 +36,8 @@ const optionalText = (label, min, max) => Joi.string().trim().min(min).max(max)
     .messages({ 'string.empty': `${label} مطلوب`, 'string.min': `${label} ${min} أحرف على الأقل`, 'string.max': `${label} طويل جدًا` });
 
 // Same rules as registration; every field is optional so the NGO can fix just what was asked.
+// ngoName / regNumber are not here: they are fixed, and stripUnknown drops them from the request.
 export const profileUpdateSchema = Joi.object({
-    ngoName: optionalText('اسم الجمعية', 3, 200),
-    regNumber: Joi.string().trim().pattern(/^\d{4,10}$/)
-        .messages({ 'string.pattern.base': 'رقم التسجيل من 4 إلى 10 أرقام' }),
     fieldOfWork: optionalText('مجال العمل', 1, 200),
     representativeName: optionalText('اسم الممثل', 3, 200),
     position: optionalText('الصفة', 2, 100),

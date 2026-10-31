@@ -12,7 +12,13 @@ export const allowedOrigins = () => {
     return configured.length ? configured : DEV_ORIGINS;
 };
 
-export const isAllowedOrigin = (origin) => !origin || allowedOrigins().includes(normalize(origin));
+// Outside production any localhost port is allowed — Vite moves to 5175, 5176... when another project holds 5173/5174.
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+const isLocalDev = (origin) => process.env.NODE_ENV !== 'production' && LOCAL_ORIGIN.test(origin);
+
+export const isAllowedOrigin = (origin) => !origin
+    || isLocalDev(normalize(origin))
+    || allowedOrigins().includes(normalize(origin));
 
 // Shared by Express (cors) and Socket.io's polling transport.
 export const corsOptions = {

@@ -13,7 +13,7 @@ router.use(authenticate, checkRole(NGO_ROLE));
  * /api/v1/ngo/profile:
  *   put:
  *     tags: [NGO Portal]
- *     summary: Correct the NGO's own data (email is fixed). Notifies admins.
+ *     summary: Correct the NGO's own data (email, NGO name and registration number are fixed). Notifies admins.
  *     requestBody:
  *       required: true
  *       content:
@@ -21,8 +21,6 @@ router.use(authenticate, checkRole(NGO_ROLE));
  *           schema:
  *             type: object
  *             properties:
- *               ngoName: { type: string }
- *               regNumber: { type: string }
  *               fieldOfWork: { type: string }
  *               representativeName: { type: string }
  *               position: { type: string }
