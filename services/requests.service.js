@@ -281,7 +281,7 @@ export const createRequest = async (ngoId, data) => {
                  need_title, summary, description, contact_method, status, submitted_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ${data.submit ? 'NOW()' : 'NULL'})
              RETURNING id`,
-            [`${data.submit ? 'REQ' : 'DRAFT'}-${refSuffix()}`, ngoId, target.type, target.serviceId, target.centerId,
+            [`${data.submit ? 'REQ' : 'D'}-${refSuffix()}`, ngoId, target.type, target.serviceId, target.centerId,
                 target.name, data.needTitle, data.summary, data.description, data.contactMethod, status]
         );
         const requestId = rows[0].id;
@@ -316,7 +316,7 @@ export const updateDraft = async (ngoId, id, data) => {
             `UPDATE service_requests SET target_type = $2, service_id = $3, center_id = $4, target_name = $5,
                  need_title = $6, summary = $7, description = $8, contact_method = $9,
                  status = $10,
-                 ref_code = CASE WHEN $11::boolean THEN replace(ref_code, 'DRAFT-', 'REQ-') ELSE ref_code END,
+                 ref_code = CASE WHEN $11::boolean THEN regexp_replace(ref_code, '^(DRAFT|D)-', 'REQ-') ELSE ref_code END,
                  submitted_at = CASE WHEN $11::boolean THEN NOW() ELSE submitted_at END,
                  updated_at = NOW()
              WHERE id = $1`,

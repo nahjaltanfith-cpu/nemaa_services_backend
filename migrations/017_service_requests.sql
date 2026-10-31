@@ -12,7 +12,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS service_requests (
     id SERIAL PRIMARY KEY,
-    -- DRAFT-XXXXXXXX while a draft, REQ-XXXXXXXX once submitted (same suffix).
+    -- D-XXXXXXXX while a draft (was DRAFT-, see 030), REQ-XXXXXXXX once submitted (same suffix).
     ref_code VARCHAR(20) NOT NULL UNIQUE,
     ngo_id INTEGER NOT NULL REFERENCES ngos (id) ON DELETE CASCADE,
     -- NULL only on drafts that have no target picked yet.

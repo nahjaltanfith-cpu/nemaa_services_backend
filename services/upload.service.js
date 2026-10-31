@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import multer from 'multer';
@@ -40,6 +40,23 @@ export const storeFile = async (key, buffer, { overwrite = false } = {}) => {
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, buffer, { flag: overwrite ? 'w' : 'wx' }); // wx: never overwrite an existing file
     return { key, fileUrl: publicUrl(key) };
+};
+
+/**
+ * Best-effort removal of stored files (keys as saved in the DB). Missing files and keys that would
+ * leave the uploads folder are skipped; failures are logged, never thrown, so a DB delete that already
+ * committed is never reported as failed because of leftover files.
+ */
+export const deleteFiles = async (keys) => {
+    await Promise.all([...new Set(keys.filter(Boolean))].map(async (key) => {
+        const target = path.resolve(UPLOADS_ROOT, key);
+        if (!target.startsWith(path.resolve(UPLOADS_ROOT) + path.sep)) return;
+        try {
+            await unlink(target);
+        } catch (error) {
+            if (error.code !== 'ENOENT') console.error('[uploads] could not delete', key, error.message);
+        }
+    }));
 };
 
 export const fileExists = async (key, pattern = TEMP_PDF_KEY_PATTERN) => {

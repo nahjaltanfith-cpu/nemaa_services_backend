@@ -92,12 +92,45 @@ const approver = requirePermission(P.APPROVE_ORG_ACCOUNTS);
  *     responses:
  *       '200': { description: '{ conversationOpen }' }
  */
+/**
+ * @openapi
+ * /admin/ngos/{id}:
+ *   delete:
+ *     tags: [Admin NGOs]
+ *     summary: Delete an NGO with all its data
+ *     description: >-
+ *       Removes the NGO account, its messages and its requests (files, status log, conversations),
+ *       and deletes its documents, picture and request files from storage. Cannot be undone.
+ *       Needs approve:org_accounts.
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     responses:
+ *       '200': { description: '{ id }' }
+ *       '404': { description: NGO not found }
+ */
+/**
+ * @openapi
+ * /admin/ngos/{id}/documents/{key}:
+ *   delete:
+ *     tags: [Admin NGOs]
+ *     summary: Delete one registration document (e.g. a wrong file)
+ *     description: >-
+ *       Clears the document and deletes its file; the NGO sees it as missing and can upload it again.
+ *       The review status is unchanged. Pushes ngo:updated. Needs approve:org_accounts.
+ *     parameters:
+ *       - { $ref: '#/components/parameters/IdParam' }
+ *       - { in: path, name: key, required: true, schema: { type: string, enum: [ngoDocument, representativeProof] } }
+ *     responses:
+ *       '200': { description: The updated NGO }
+ *       '404': { description: NGO or document not found }
+ */
 router.get('/', controller.listNgos);
 router.get('/:id', parseIdParam(), controller.getNgo);
 router.patch('/:id/status', parseIdParam(), approver, validateBody(statusUpdateSchema), controller.updateStatus);
 router.get('/:id/messages', parseIdParam(), controller.listMessages);
 router.post('/:id/messages', parseIdParam(), approver, validateBody(messageSchema), controller.sendMessage);
 router.post('/:id/messages/read', parseIdParam(), controller.markRead);
+router.delete('/:id', parseIdParam(), approver, controller.deleteNgo);
+router.delete('/:id/documents/:key', parseIdParam(), approver, controller.deleteDocument);
 router.patch('/:id/conversation', parseIdParam(), approver, validateBody(conversationSchema), controller.setConversation);
 
 export default router;

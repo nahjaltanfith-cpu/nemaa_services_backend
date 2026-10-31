@@ -184,7 +184,7 @@ const REQUESTS = [
         ],
     },
     {
-        ref: 'DRAFT-6B789C10', status: 'draft', target: { center: 'training-center' },
+        ref: 'D-6B789C10', status: 'draft', target: { center: 'training-center' },
         needTitle: 'برنامج تدريبي مكثف لأعضاء مجلس الإدارة والمدير التنفيذي',
         summary: 'مسودة قيد الإعداد لتحديد عدد المتدربين والجدول الزمني المناسب',
         description: 'نستهدف تعزيز مهارات القيادة التكيفية والحوكمة المؤسسية المتقدمة.',

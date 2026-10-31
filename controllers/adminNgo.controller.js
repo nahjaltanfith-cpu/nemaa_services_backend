@@ -66,3 +66,21 @@ export const setConversation = handle('admin-ngo conversation', 200, 'تم تح�
     });
     return result;
 });
+
+export const deleteDocument = handle('admin-ngo delete document', 200, 'تم حذف المستند', async (req) => {
+    const { ngo, label } = await adminNgo.deleteNgoDocument(req.params.id, req.params.key);
+    await logActivity(null, {
+        actorId: req.user.id, action: 'ngo.document_delete', entityType: 'ngo', entityId: ngo.id,
+        summary: `حذف مستند «${label}» لجمعية «${ngo.ngoName}»`,
+    });
+    return ngo;
+});
+
+export const deleteNgo = handle('admin-ngo delete', 200, 'تم حذف الجمعية وكل بياناتها', async (req) => {
+    const ngo = await adminNgo.deleteNgo(req.params.id);
+    await logActivity(null, {
+        actorId: req.user.id, action: 'ngo.delete', entityType: 'ngo', entityId: ngo.id,
+        summary: `حذف جمعية «${ngo.ngoName}» وكل بياناتها (الطلبات والرسائل والملفات)`,
+    });
+    return { id: ngo.id };
+});
