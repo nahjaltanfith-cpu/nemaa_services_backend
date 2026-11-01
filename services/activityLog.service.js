@@ -24,7 +24,7 @@ export const changedFields = (before, after, labels) => Object.keys(labels)
 export const describeChanges = (changes) => (changes.length ? changes.join('، ') : 'بدون تغيير في البيانات');
 
 /** Newest first, PAGE_SIZE at a time; `before` is the last id of the previous page. */
-export const listActivity = async ({ entityType, actorId, before } = {}) => {
+export const listActivity = async ({ entityType, actorId, before, from, to, limit = PAGE_SIZE, offset } = {}) => {
     const where = [];
     const params = [];
     const add = (sql, value) => {
@@ -34,19 +34,30 @@ export const listActivity = async ({ entityType, actorId, before } = {}) => {
     if (entityType) add('a.entity_type = ?', entityType);
     if (actorId) add('a.actor_user_id = ?', actorId);
     if (before) add('a.id < ?', before);
-    params.push(PAGE_SIZE + 1);
+    if (from) add('a.created_at >= ?', from);
+    if (to) add('a.created_at < ?', to);
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    // Numbered pages also need the total (same filters)
+    const total = offset === undefined ? undefined
+        : Number((await pool.query(`SELECT COUNT(*) AS count FROM activity_log a ${whereSql}`, params)).rows[0].count);
+    // limit 0 = every matching row
+    const unlimited = limit === 0;
+    if (!unlimited) params.push(limit + 1);
+    if (offset !== undefined) params.push(offset);
+    const limitSql = unlimited ? '' : `LIMIT $${offset === undefined ? params.length : params.length - 1}`;
+    const offsetSql = offset === undefined ? '' : ` OFFSET $${params.length}`;
     const { rows } = await pool.query(
         `SELECT a.*, u.name AS actor_name, u.email AS actor_email, r.label AS actor_role
          FROM activity_log a
          LEFT JOIN users u ON u.id = a.actor_user_id
          LEFT JOIN roles r ON r.id = u.role_id
-         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+         ${whereSql}
          ORDER BY a.id DESC
-         LIMIT $${params.length}`,
+         ${limitSql}${offsetSql}`,
         params
     );
     return {
-        items: rows.slice(0, PAGE_SIZE).map((row) => ({
+        items: (unlimited ? rows : rows.slice(0, limit)).map((row) => ({
             id: row.id,
             action: row.action,
             entityType: row.entity_type,
@@ -59,6 +70,7 @@ export const listActivity = async ({ entityType, actorId, before } = {}) => {
                 : null,
             createdAt: row.created_at,
         })),
-        hasMore: rows.length > PAGE_SIZE,
+        hasMore: !unlimited && rows.length > limit,
+        ...(total !== undefined && { total }),
     };
 };

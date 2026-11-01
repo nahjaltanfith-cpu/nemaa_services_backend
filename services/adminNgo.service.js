@@ -1,4 +1,5 @@
 import pool from '../db.js';
+import { countsBy, likeTerm, pageSql } from '../utils/pagination.js';
 import { HttpError } from '../utils/httpError.js';
 import { DOCUMENTS, NGO_COLUMNS, toPublicNgo } from './ngo.mapper.js';
 import { EVENTS, emitToThread } from './realtime.service.js';
@@ -9,19 +10,42 @@ const notFound = () => new HttpError(404, 'الجمعية غير موجودة', 
 // Only NGOs that confirmed their email are real applicants.
 const VERIFIED = 'email_verified_at IS NOT NULL';
 
-/** All verified NGOs, newest first; unread counts are messages from the NGO not yet read by staff. */
-export const listNgos = async ({ status } = {}) => {
+/**
+ * Verified NGOs, newest first; unread counts are messages from the NGO not yet read by staff.
+ * Without `page` → the plain array (the realtime unread badge uses it). With it → one page,
+ * the total, and the count per account status over every verified NGO (the filter's numbers).
+ */
+export const listNgos = async ({ status, search, page, pageSize } = {}) => {
     const params = [];
-    let filter = '';
+    const where = [VERIFIED];
     if (status) {
         params.push(status);
-        filter = 'AND account_status = $1';
+        where.push(`account_status = $${params.length}`);
     }
-    const { rows } = await pool.query(
-        `SELECT ${NGO_COLUMNS} FROM ngos WHERE ${VERIFIED} ${filter} ORDER BY created_at DESC, id DESC`,
-        params
-    );
-    return rows.map((row) => toPublicNgo(row, 'admin'));
+    if (search) {
+        params.push(likeTerm(search));
+        where.push(`(ngo_name ILIKE $${params.length} OR email ILIKE $${params.length})`);
+    }
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    if (!page) {
+        const { rows } = await pool.query(`SELECT ${NGO_COLUMNS} FROM ngos ${whereSql} ORDER BY created_at DESC, id DESC`, params);
+        return rows.map((row) => toPublicNgo(row, 'admin'));
+    }
+    const pageParams = [...params];
+    const limit = pageSql(pageParams, { page, pageSize });
+    const [{ rows }, { rows: totalRows }, { rows: statusRows }] = await Promise.all([
+        pool.query(`SELECT ${NGO_COLUMNS} FROM ngos ${whereSql} ORDER BY created_at DESC, id DESC ${limit}`, pageParams),
+        pool.query(`SELECT COUNT(*) AS count FROM ngos ${whereSql}`, params),
+        pool.query(`SELECT account_status AS key, COUNT(*) AS count FROM ngos WHERE ${VERIFIED} GROUP BY account_status`),
+    ]);
+    const byStatus = countsBy(statusRows);
+    return {
+        items: rows.map((row) => toPublicNgo(row, 'admin')),
+        total: Number(totalRows[0].count),
+        page,
+        pageSize,
+        counts: { all: Object.values(byStatus).reduce((sum, count) => sum + count, 0), status: byStatus },
+    };
 };
 
 export const getNgo = async (id) => {

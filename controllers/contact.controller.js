@@ -1,3 +1,5 @@
+import Joi from 'joi';
+import { pageFields } from '../utils/pagination.js';
 import { logActivity } from '../services/activityLog.service.js';
 import * as contact from '../services/contact.service.js';
 import { notifyContactRequest } from '../services/notifications.service.js';
@@ -13,10 +15,14 @@ export const create = handle('contact create', 201, 'شكرًا لتواصلك،
     return null;
 });
 
+// Search + numbered pages (the status is checked below)
+const contactListSchema = Joi.object({ status: Joi.string(), search: Joi.string().trim().max(100).allow(''), ...pageFields });
+
 export const list = handle('contact list', 200, 'تم جلب الرسائل', (req) => {
-    const { status } = req.query;
-    if (status && !contact.CONTACT_STATUSES.includes(status)) throw new HttpError(400, 'حالة غير صالحة', 'INVALID_STATUS');
-    return contact.listContactRequests({ status });
+    const { value, error } = contactListSchema.validate(req.query, { convert: true, stripUnknown: true });
+    if (error) throw new HttpError(400, 'معايير البحث غير صالحة', 'INVALID_FILTER');
+    if (value.status && !contact.CONTACT_STATUSES.includes(value.status)) throw new HttpError(400, 'حالة غير صالحة', 'INVALID_STATUS');
+    return contact.listContactRequests(value);
 });
 
 export const get = handle('contact get', 200, 'تم جلب الرسالة',

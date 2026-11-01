@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { pageFields } from '../utils/pagination.js';
 import { TEMP_PDF_KEY_PATTERN } from '../services/upload.service.js';
 
 export const REQUEST_STATUSES = ['draft', 'under_study', 'needs_completion', 'in_progress', 'completed'];
@@ -62,8 +63,16 @@ export const assigneeSchema = Joi.object({
 });
 
 export const requestFilterSchema = Joi.object({
-    status: Joi.string().valid(...REQUEST_STATUSES),
+    // One status or a comma-separated list (e.g. under_study,needs_completion) → array
+    status: Joi.string().custom((value, helpers) => {
+        const list = value.split(',').map((item) => item.trim()).filter(Boolean);
+        if (!list.length || list.some((item) => !REQUEST_STATUSES.includes(item))) return helpers.error('any.invalid');
+        return list;
+    }),
     search: Joi.string().trim().max(100).allow(''),
-    // Team only: 'me' = assigned to the signed-in user, 'unassigned' = nobody yet.
-    assignee: Joi.string().valid('me', 'unassigned'),
+    // Team only: 'me' = assigned to the signed-in user, 'assigned' = to anyone, 'unassigned' = nobody yet.
+    assignee: Joi.string().valid('me', 'assigned', 'unassigned'),
+    // Team only: one NGO's requests (the NGO page's "its requests" link)
+    ngoId: Joi.number().integer().positive(),
+    ...pageFields,
 });

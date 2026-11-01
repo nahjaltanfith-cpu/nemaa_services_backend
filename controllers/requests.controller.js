@@ -14,7 +14,10 @@ const filters = (query) => {
 
 // ── NGO (req.user.id is the NGO id) ─────────────────────────────────────────
 export const ngoList = handle('requests ngo-list', 200, 'تم جلب الطلبات',
-    (req) => requests.listRequestsForNgo(req.user.id, filters(req.query)));
+    (req) => {
+        const { ngoId, assignee, page, pageSize, ...own } = filters(req.query);
+        return requests.listRequestsForNgo(req.user.id, own);
+    });
 
 // Opening the request clears its "new update" mark.
 export const ngoGet = handle('requests ngo-get', 200, 'تم جلب الطلب', async (req) => {
@@ -72,10 +75,16 @@ export const adminAssign = handle('requests admin-assign', 200, 'تم تحديث
 export const adminAddDeliverables = handle('requests admin-deliverables', 201, 'تم رفع ملفات التسليم',
     (req) => requests.addDeliverables(req.params.id, actorOf(req), req.body.files));
 
+export const adminArchive = handle('requests admin-archive', 200, 'تم حذف الطلب',
+    (req) => requests.archiveRequest(req.params.id, actorOf(req)));
+
 export const adminRemoveDeliverable = handle('requests admin-deliverable-delete', 200, 'تم حذف الملف',
     (req) => requests.removeDeliverable(req.params.id, actorOf(req), req.params.fileId));
 
-export const adminMessages = handle('requests admin-messages', 200, 'تم جلب المحادثة',
+export const adminRemoveNgoFile = handle('requests admin-file-delete', 200, 'تم حذف الملف',
+    (req) => requests.removeNgoFile(req.params.id, actorOf(req), req.params.fileId));
+
+export const adminMessages =handle('requests admin-messages', 200, 'تم جلب المحادثة',
     (req) => requests.listMessages(req.params.id, { viewer: viewerOf(req.user) }));
 
 // The log records that a reply was sent, not its text (that stays in the conversation).

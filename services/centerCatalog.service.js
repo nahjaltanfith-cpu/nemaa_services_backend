@@ -24,7 +24,8 @@ const toCenter = (row) => ({
     title: row.title,
     status: row.status,
     imageUrl: row.image_url,
-    price: Number(row.price),
+    price: row.price === null ? null : Number(row.price),
+    isFree: row.is_free,
     requestCount: row.request_count,
     rating: Number(row.rating),
     responseTime: row.response_time,
@@ -82,7 +83,7 @@ const columnValues = (data) => [
     data.title, data.status, data.imageUrl, data.price, data.responseTime, data.executionDuration,
     data.overview, data.shortDescription || buildShortDescription(data.overview),
     JSON.stringify(data.outputs), JSON.stringify(data.methodology), JSON.stringify(data.targetAudience),
-    JSON.stringify(data.extraServices ?? []),
+    JSON.stringify(data.extraServices ?? []), Boolean(data.isFree),
 ];
 
 // Inside a transaction: replaces the center's services with exactly `serviceIds`.
@@ -118,8 +119,8 @@ export const createCenter = async (data) => {
         const { rows } = await client.query(
             `INSERT INTO enablement_centers (title, status, image_url, price, response_time,
                  execution_duration, overview, short_description, outputs, methodology, target_audience,
-                 extra_services)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 extra_services, is_free)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
              RETURNING id`,
             columnValues(data)
         );
@@ -135,7 +136,7 @@ export const updateCenter = async (id, data) => {
         const { rowCount } = await client.query(
             `UPDATE enablement_centers SET title = $2, status = $3, image_url = $4, price = $5,
                  response_time = $6, execution_duration = $7, overview = $8, short_description = $9,
-                 outputs = $10, methodology = $11, target_audience = $12, extra_services = $13, updated_at = NOW()
+                 outputs = $10, methodology = $11, target_audience = $12, extra_services = $13, is_free = $14, updated_at = NOW()
              WHERE id = $1`,
             [id, ...columnValues(data)]
         );

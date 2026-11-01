@@ -1,4 +1,5 @@
 import pool from '../db.js';
+import { countsBy, likeTerm, pageSql } from '../utils/pagination.js';
 import { HttpError } from '../utils/httpError.js';
 
 // Query types on the public form, with the Arabic names used in emails and summaries.
@@ -56,15 +57,42 @@ export const createContactRequest = async ({ type, fullName, organizationName, e
     return toContactRequest(rows[0]);
 };
 
-/** Newest first; optionally one status. */
-export const listContactRequests = async ({ status } = {}) => {
-    const { rows } = await pool.query(
-        `SELECT ${COLUMNS} FROM contact_requests
-         WHERE ($1::varchar IS NULL OR status = $1)
-         ORDER BY created_at DESC, id DESC`,
-        [status || null]
-    );
-    return rows.map(toContactRequest);
+/**
+ * Newest first; optionally one status and a search. Without `page` → the plain array.
+ * With it → one page, the total, and the count per status over every message (the filter's numbers).
+ */
+export const listContactRequests = async ({ status, search, page, pageSize } = {}) => {
+    const params = [];
+    const where = [];
+    if (status) {
+        params.push(status);
+        where.push(`status = $${params.length}`);
+    }
+    if (search) {
+        params.push(likeTerm(search));
+        const term = `$${params.length}`;
+        where.push(`(full_name ILIKE ${term} OR organization_name ILIKE ${term} OR email ILIKE ${term} OR phone ILIKE ${term} OR message ILIKE ${term})`);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    if (!page) {
+        const { rows } = await pool.query(`SELECT ${COLUMNS} FROM contact_requests ${whereSql} ORDER BY created_at DESC, id DESC`, params);
+        return rows.map(toContactRequest);
+    }
+    const pageParams = [...params];
+    const limit = pageSql(pageParams, { page, pageSize });
+    const [{ rows }, { rows: totalRows }, { rows: statusRows }] = await Promise.all([
+        pool.query(`SELECT ${COLUMNS} FROM contact_requests ${whereSql} ORDER BY created_at DESC, id DESC ${limit}`, pageParams),
+        pool.query(`SELECT COUNT(*) AS count FROM contact_requests ${whereSql}`, params),
+        pool.query('SELECT status AS key, COUNT(*) AS count FROM contact_requests GROUP BY status'),
+    ]);
+    const byStatus = countsBy(statusRows);
+    return {
+        items: rows.map(toContactRequest),
+        total: Number(totalRows[0].count),
+        page,
+        pageSize,
+        counts: { all: Object.values(byStatus).reduce((sum, count) => sum + count, 0), status: byStatus },
+    };
 };
 
 export const getContactRequest = async (id) => {

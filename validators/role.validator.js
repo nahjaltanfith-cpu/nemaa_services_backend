@@ -34,4 +34,11 @@ export const activityFilterSchema = Joi.object({
     entityType: Joi.string().valid('request', 'role', 'staff', 'ngo', 'service', 'center', 'category', 'contact'),
     actorId: Joi.number().integer().positive(),
     before: Joi.number().integer().positive(),
+    // A time window (e.g. one day on the staff profile's timeline): from inclusive, to exclusive
+    from: Joi.date().iso(),
+    to: Joi.date().iso(),
+    // Bigger pages for a whole-day timeline; 0 = no limit (the table's "all" page size)
+    limit: Joi.number().integer().min(0).max(500),
+    // Numbered pages (the activity table's pager): skip this many, and return the total
+    offset: Joi.number().integer().min(0),
 });

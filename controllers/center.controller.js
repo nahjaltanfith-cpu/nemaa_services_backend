@@ -17,7 +17,7 @@ export const get = handle('centers get', 200, 'تم جلب المركز',
 
 // The saved center in the form's shape (what applyAllowedFields falls back to).
 const savedInput = (center) => ({
-    title: center.title, status: center.status, imageUrl: center.imageUrl, price: center.price,
+    title: center.title, status: center.status, imageUrl: center.imageUrl, price: center.price, isFree: center.isFree,
     responseTime: center.responseTime, executionDuration: center.executionDuration, overview: center.overview,
     shortDescription: center.shortDescription, outputs: center.outputs, methodology: center.methodology,
     targetAudience: center.targetAudience, extraServices: center.extraServices, serviceIds: center.serviceIds,
@@ -25,7 +25,7 @@ const savedInput = (center) => ({
 
 // Field names for the activity log.
 const FIELD_LABELS = {
-    title: 'الاسم', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر', responseTime: 'وقت الاستجابة',
+    title: 'الاسم', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر', isFree: 'مجاني حاليًا', responseTime: 'وقت الاستجابة',
     executionDuration: 'مدة التنفيذ', overview: 'النظرة العامة', shortDescription: 'الوصف المختصر',
     outputs: 'المخرجات', methodology: 'منهجية العمل', targetAudience: 'الفئة المستهدفة', serviceIds: 'الخدمات',
     extraServices: 'خدمات ضمن المركز',
@@ -33,7 +33,7 @@ const FIELD_LABELS = {
 
 // Creating needs manage:catalog (route); the price still needs manage:pricing.
 export const create = handle('centers create', 201, 'تم إنشاء المركز', async (req) => {
-    const center = await catalog.createCenter(applyAllowedFields(req.user, req.body, { ...req.body, price: 0 }));
+    const center = await catalog.createCenter(applyAllowedFields(req.user, req.body, { ...req.body, price: 0, isFree: false }));
     await logActivity(null, {
         actorId: req.user.id, action: 'center.create', entityType: 'center', entityId: center.id,
         summary: `إضافة المركز «${center.title}» (السعر ${center.price})`, details: { status: center.status, price: center.price },
@@ -46,7 +46,7 @@ export const update = handle('centers update', 200, 'تم تحديث المرك�
     const before = savedInput(current);
     const center = await catalog.updateCenter(req.params.id, applyAllowedFields(req.user, req.body, before));
     const changes = changedFields(before, savedInput(center), FIELD_LABELS)
-        .map((label) => (label === FIELD_LABELS.price ? `السعر ${current.price} ← ${center.price}` : label));
+        .map((label) => (label === FIELD_LABELS.price ? `السعر ${current.price ?? 'يحدد بعد الاجتماع'} ← ${center.price ?? 'يحدد بعد الاجتماع'}` : label));
     await logActivity(null, {
         actorId: req.user.id, action: 'center.update', entityType: 'center', entityId: center.id,
         summary: `تعديل المركز «${center.title}»: ${describeChanges(changes)}`,

@@ -54,7 +54,7 @@ export const isRequestVisible = async (viewer, requestId, client = pool) => {
     if (!viewer.scope) return true;
     const params = [requestId];
     const { rows } = await client.query(
-        `SELECT 1 FROM service_requests r WHERE r.id = $1 AND r.status <> 'draft' AND ${scopeSql(viewer, params)}`,
+        `SELECT 1 FROM service_requests r WHERE r.id = $1 AND r.status <> 'draft' AND r.deleted_at IS NULL AND ${scopeSql(viewer, params)}`,
         params
     );
     return rows.length > 0;

@@ -1,3 +1,5 @@
+import Joi from 'joi';
+import { pageFields } from '../utils/pagination.js';
 import { logActivity } from '../services/activityLog.service.js';
 import * as adminNgo from '../services/adminNgo.service.js';
 import * as messages from '../services/messages.service.js';
@@ -6,12 +8,17 @@ import { handle } from '../utils/handle.js';
 import { HttpError } from '../utils/httpError.js';
 import { statusFilterSchema } from '../validators/review.validator.js';
 
+// Search + numbered pages (the status is checked above)
+const ngoListSchema = Joi.object({ search: Joi.string().trim().max(100).allow(''), ...pageFields });
+
 export const listNgos = handle('admin-ngo list', 200, 'تم جلب الجمعيات', (req) => {
     const { status } = req.query;
     if (status !== undefined && statusFilterSchema.validate(status).error) {
         throw new HttpError(400, 'حالة غير صالحة', 'INVALID_STATUS');
     }
-    return adminNgo.listNgos({ status });
+    const { value, error } = ngoListSchema.validate(req.query, { convert: true, stripUnknown: true });
+    if (error) throw new HttpError(400, 'معايير البحث غير صالحة', 'INVALID_FILTER');
+    return adminNgo.listNgos({ ...value, status });
 });
 
 export const getNgo = handle('admin-ngo get', 200, 'تم جلب بيانات الجمعية',

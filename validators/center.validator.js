@@ -11,8 +11,11 @@ export const centerSchema = Joi.object({
     status: Joi.string().valid(...CENTER_STATUSES).default('active')
         .messages({ 'any.only': 'حالة المركز غير صالحة' }),
     imageUrl: optionalText(512),
-    price: Joi.number().min(0).max(9999999999.99).precision(2).default(0)
+    // null = no fixed price, shown as "يحدد بعد الاجتماع" (same as services).
+    price: Joi.number().min(0).max(9999999999.99).precision(2).allow(null).default(0)
         .messages({ 'number.base': 'السعر يجب أن يكون رقمًا', 'number.min': 'السعر لا يمكن أن يكون سالبًا' }),
+    // Free for now (e.g. launch): the price is kept, the website shows the center as free.
+    isFree: Joi.boolean().default(false),
     responseTime: optionalText(100),
     executionDuration: optionalText(100),
     overview: Joi.string().trim().min(10).max(20000).required()

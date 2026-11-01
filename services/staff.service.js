@@ -2,10 +2,11 @@ import bcrypt from 'bcryptjs';
 import pool from '../db.js';
 import { HttpError } from '../utils/httpError.js';
 import { logActivity } from './activityLog.service.js';
+import { assertValidImage } from './serviceCatalog.service.js';
 
 // Staff = users whose role is a staff role (public 'user' sign-ups are not listed).
 const SELECT = `
-    SELECT u.id, u.name, u.email, u.is_active, u.last_login_at, u.created_at, u.updated_at,
+    SELECT u.id, u.name, u.email, u.avatar_url, u.is_active, u.last_login_at, u.created_at, u.updated_at,
            r.id AS role_id, r.name AS role_name, r.label AS role_label, r.is_super_admin,
            c.name AS created_by_name
     FROM users u
@@ -17,6 +18,7 @@ const toStaff = (row) => ({
     id: row.id,
     name: row.name,
     email: row.email,
+    avatarUrl: row.avatar_url,
     isActive: row.is_active,
     role: { id: row.role_id, name: row.role_name, label: row.role_label, isSuperAdmin: row.is_super_admin },
     lastLoginAt: row.last_login_at,
@@ -65,7 +67,8 @@ const findStaffRole = async (client, roleId) => {
 const superAdminOnly = () => new HttpError(403, 'حسابات مدير النظام يديرها مدير النظام فقط', 'FORBIDDEN');
 
 /** actor = req.user (id, isSuperAdmin). */
-export const createStaff = async (actor, { name, email, password, roleId }) => {
+export const createStaff = async (actor, { name, email, password, roleId, avatarUrl }) => {
+    await assertValidImage(avatarUrl);
     const hash = await bcrypt.hash(password, 12);
     const client = await pool.connect();
     try {
@@ -73,9 +76,9 @@ export const createStaff = async (actor, { name, email, password, roleId }) => {
         const role = await findStaffRole(client, roleId);
         if (role.is_super_admin && !actor.isSuperAdmin) throw superAdminOnly();
         const { rows } = await client.query(
-            `INSERT INTO users (name, email, password, role_id, created_by)
-             VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-            [name, email, hash, roleId, actor.id]
+            `INSERT INTO users (name, email, password, role_id, created_by, avatar_url)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [name, email, hash, roleId, actor.id, avatarUrl || null]
         );
         await logActivity(client, {
             actorId: actor.id, action: 'staff.create', entityType: 'staff', entityId: rows[0].id,
@@ -97,6 +100,7 @@ export const createStaff = async (actor, { name, email, password, roleId }) => {
  */
 export const updateStaff = async (actor, id, changes) => {
     const actorId = actor.id;
+    if (changes.avatarUrl) await assertValidImage(changes.avatarUrl);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -130,6 +134,7 @@ export const updateStaff = async (actor, id, changes) => {
         };
         if (changes.name !== undefined) set('name', changes.name);
         if (changes.email !== undefined) set('email', changes.email);
+        if (changes.avatarUrl !== undefined) set('avatar_url', changes.avatarUrl || null);
         if (changes.roleId !== undefined) set('role_id', changes.roleId);
         if (changes.isActive !== undefined) set('is_active', changes.isActive);
         if (changes.password) set('password', await bcrypt.hash(changes.password, 12));

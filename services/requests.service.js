@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import pool from '../db.js';
+import { countsBy, likeTerm, pageSql } from '../utils/pagination.js';
 import { HttpError } from '../utils/httpError.js';
 import { P } from '../config/permissions.js';
 import { logActivity } from './activityLog.service.js';
@@ -53,7 +54,10 @@ const summarySelect = (unreadFrom) => `
         -- A team action the NGO has not opened yet.
         EXISTS (SELECT 1 FROM request_status_log l
                 WHERE l.request_id = r.id AND l.actor_type = 'admin'
-                  AND l.created_at > COALESCE(r.ngo_seen_at, 'epoch'::timestamp)) AS has_team_update
+                  AND l.created_at > COALESCE(r.ngo_seen_at, 'epoch'::timestamp)) AS has_team_update,
+        -- Submitted and the team has not recorded anything yet (dashboard shows it as "new").
+        (r.status = 'under_study' AND NOT EXISTS (SELECT 1 FROM request_status_log l
+                WHERE l.request_id = r.id AND l.actor_type = 'admin')) AS is_new
     FROM service_requests r
     JOIN ngos n ON n.id = r.ngo_id
     LEFT JOIN users a ON a.id = r.assigned_to_user_id`;
@@ -74,6 +78,8 @@ const toSummary = (row) => ({
     pendingItems: row.pending_items,
     // NGO view: the team changed something since the NGO last opened the request.
     hasTeamUpdate: row.has_team_update,
+    // Team view: submitted and untouched by the team — shown as "new" until the first team update.
+    isNew: row.is_new,
     submittedAt: row.submitted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -119,7 +125,7 @@ const loadRequest = async (id, { ngoId = null, unreadFrom, viewer = null } = {},
     const params = [id, ngoId];
     const { rows } = await client.query(
         `${summarySelect(unreadFrom)}
-         WHERE r.id = $1 AND ($2::int IS NULL OR r.ngo_id = $2) AND ($2::int IS NOT NULL OR r.status <> 'draft')
+         WHERE r.id = $1 AND r.deleted_at IS NULL AND ($2::int IS NULL OR r.ngo_id = $2) AND ($2::int IS NOT NULL OR r.status <> 'draft')
            AND ${scopeSql(viewer, params)}`,
         params
     );
@@ -165,33 +171,77 @@ export const markSeenByNgo = async (ngoId, id) => {
 };
 export const getRequestForAdmin = (id, viewer = null) => loadRequest(id, { unreadFrom: 'ngo', viewer });
 
-const listRequests = async ({ ngoId = null, status, search, assignee, unreadFrom, viewer = null }) => {
-    const where = [];
+/**
+ * ngoId = the NGO's own list (its portal); filterNgoId = the team narrowing its list to one NGO.
+ * Without `page` → the plain array. With it → one page plus the totals the dashboard shows:
+ * counts per status and per assignment over the base set (scope + NGO), so the filter chips stay right.
+ */
+const listRequests = async ({
+    ngoId = null, filterNgoId = null, status, search, assignee, unreadFrom, viewer = null, page, pageSize,
+}) => {
+    // Base: what the viewer may see (and the one NGO when filtered)
+    const base = ['r.deleted_at IS NULL'];
     const params = [];
+    const where = base;
     const add = (sql, value) => {
         params.push(value);
         where.push(sql.replaceAll('?', `$${params.length}`));
     };
     if (ngoId) add('r.ngo_id = ?', ngoId);
     else where.push("r.status <> 'draft'", scopeSql(viewer, params));
-    if (status) add('r.status = ?', status);
-    // Team filter: 'me' = assigned to the viewer · 'unassigned' = nobody yet.
+    if (!ngoId && filterNgoId) add('r.ngo_id = ?', filterNgoId);
+    const baseSql = where.join(' AND ');
+    const baseParams = [...params];
+    // Filters on top of the base
+    // One status or several (the dashboard filter allows a multi-select)
+    if (status?.length) add('r.status = ANY(?::request_status[])', [].concat(status));
+    // Team filter: 'me' = assigned to the viewer · 'assigned' = to anyone · 'unassigned' = nobody yet.
     if (!ngoId && assignee === 'me') add('r.assigned_to_user_id = ?', viewer?.id);
+    if (!ngoId && assignee === 'assigned') where.push('r.assigned_to_user_id IS NOT NULL');
     if (!ngoId && assignee === 'unassigned') where.push('r.assigned_to_user_id IS NULL');
     if (search) {
-        add('(r.ref_code ILIKE ? OR r.need_title ILIKE ? OR r.target_name ILIKE ? OR n.ngo_name ILIKE ?)',
-            `%${search.replace(/[%_\\]/g, '\\$&')}%`);
+        add('(r.ref_code ILIKE ? OR r.need_title ILIKE ? OR r.target_name ILIKE ? OR n.ngo_name ILIKE ?)', likeTerm(search));
     }
-    const { rows } = await pool.query(
-        `${summarySelect(unreadFrom)} ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-         ORDER BY r.updated_at DESC, r.id DESC`,
-        params
-    );
-    return rows.map(ngoId ? toSummary : toAdminSummary);
+    const whereSql = `WHERE ${where.join(' AND ')}`;
+    const map = ngoId ? toSummary : toAdminSummary;
+    if (!page) {
+        const { rows } = await pool.query(
+            `${summarySelect(unreadFrom)} ${whereSql} ORDER BY r.updated_at DESC, r.id DESC`, params
+        );
+        return rows.map(map);
+    }
+    const pageParams = [...params];
+    const limit = pageSql(pageParams, { page, pageSize });
+    const [{ rows }, { rows: totalRows }, { rows: statusRows }, { rows: assignRows }, ngoRows] = await Promise.all([
+        pool.query(`${summarySelect(unreadFrom)} ${whereSql} ORDER BY r.updated_at DESC, r.id DESC ${limit}`, pageParams),
+        pool.query(`SELECT COUNT(*) AS count FROM service_requests r JOIN ngos n ON n.id = r.ngo_id ${whereSql}`, params),
+        pool.query(`SELECT r.status AS key, COUNT(*) AS count FROM service_requests r WHERE ${baseSql} GROUP BY r.status`, baseParams),
+        pool.query(
+            `SELECT CASE WHEN r.assigned_to_user_id IS NULL THEN 'unassigned' ELSE 'assigned' END AS key, COUNT(*) AS count
+             FROM service_requests r WHERE ${baseSql} GROUP BY 1`,
+            baseParams
+        ),
+        filterNgoId ? pool.query('SELECT ngo_name FROM ngos WHERE id = $1', [filterNgoId]) : { rows: [] },
+    ]);
+    const byStatus = countsBy(statusRows);
+    return {
+        items: rows.map(map),
+        total: Number(totalRows[0].count),
+        page,
+        pageSize,
+        counts: {
+            all: Object.values(byStatus).reduce((sum, count) => sum + count, 0),
+            status: byStatus,
+            assignee: { assigned: 0, unassigned: 0, ...countsBy(assignRows) },
+        },
+        // The NGO the list is narrowed to (its name for the filter chip)
+        ...(filterNgoId && { ngo: { id: filterNgoId, name: ngoRows.rows[0]?.ngo_name || null } }),
+    };
 };
 
 export const listRequestsForNgo = (ngoId, filters = {}) => listRequests({ ...filters, ngoId, unreadFrom: 'admin' });
-export const listRequestsForAdmin = (filters = {}, viewer = null) => listRequests({ ...filters, viewer, unreadFrom: 'ngo' });
+export const listRequestsForAdmin = ({ ngoId, ...filters } = {}, viewer = null) =>
+    listRequests({ ...filters, filterNgoId: ngoId, viewer, unreadFrom: 'ngo' });
 
 // ── Rules shared by create / update ─────────────────────────────────────────
 const assertCanRequest = async (ngoId) => {
@@ -304,7 +354,7 @@ export const updateDraft = async (ngoId, id, data) => {
     await assertFilesExist(data.attachments);
     await inTransaction(async (client) => {
         const { rows } = await client.query(
-            'SELECT status FROM service_requests WHERE id = $1 AND ngo_id = $2 FOR UPDATE', [id, ngoId]
+            'SELECT status FROM service_requests WHERE id = $1 AND ngo_id = $2 AND deleted_at IS NULL FOR UPDATE', [id, ngoId]
         );
         if (!rows.length) throw notFound();
         if (rows[0].status !== 'draft') {
@@ -346,7 +396,7 @@ export const deleteDraft = async (ngoId, id) => {
 // Locks the NGO's request while it waits for missing documents.
 const lockAwaitingCompletion = async (client, ngoId, id) => {
     const { rows } = await client.query(
-        'SELECT status FROM service_requests WHERE id = $1 AND ngo_id = $2 FOR UPDATE', [id, ngoId]
+        'SELECT status FROM service_requests WHERE id = $1 AND ngo_id = $2 AND deleted_at IS NULL FOR UPDATE', [id, ngoId]
     );
     if (!rows.length) throw notFound();
     if (rows[0].status !== 'needs_completion') {
@@ -428,7 +478,7 @@ const lockSubmitted = async (client, id, actor = null) => {
     const params = [id];
     const { rows } = await client.query(
         `SELECT r.ngo_id, r.status, r.ref_code, r.assigned_to_user_id FROM service_requests r
-         WHERE r.id = $1 AND r.status <> 'draft' AND ${scopeSql(actor, params)} FOR UPDATE OF r`,
+         WHERE r.id = $1 AND r.status <> 'draft' AND r.deleted_at IS NULL AND ${scopeSql(actor, params)} FOR UPDATE OF r`,
         params
     );
     if (!rows.length) throw notFound();
@@ -513,6 +563,26 @@ export const addDeliverables = async (id, actor, files) => {
     return getRequestForAdmin(id);
 };
 
+/**
+ * Super admin: archive a submitted request. It disappears from the dashboard and from the NGO;
+ * the row, files, messages and history stay in the database.
+ */
+export const archiveRequest = async (id, actor) => {
+    const ngoId = await inTransaction(async (client) => {
+        const request = await lockSubmitted(client, id, actor);
+        await client.query(
+            'UPDATE service_requests SET deleted_at = NOW(), deleted_by_user_id = $2 WHERE id = $1', [id, actor.id]
+        );
+        await logActivity(client, {
+            actorId: actor.id, action: 'request.archive', entityType: 'request', entityId: id,
+            summary: `${request.ref_code}: أرشفة الطلب`,
+        });
+        return request.ngo_id;
+    });
+    notifyUpdated(ngoId, id, null);
+    return { id };
+};
+
 export const removeDeliverable = async (id, actor, fileId) => {
     const ngoId = await inTransaction(async (client) => {
         const request = await lockSubmitted(client, id, actor);
@@ -524,6 +594,33 @@ export const removeDeliverable = async (id, actor, fileId) => {
         await logActivity(client, {
             actorId: actor.id, action: 'request.deliverable_delete', entityType: 'request', entityId: id,
             summary: `${request.ref_code}: حذف ملف التسليم «${rows[0].original_name}»`,
+        });
+        return request.ngo_id;
+    });
+    notifyUpdated(ngoId, id, null);
+    return getRequestForAdmin(id);
+};
+
+/**
+ * Removes a document the NGO sent (an attachment or a completion upload). A completion file's
+ * missing item goes back to "waiting"; the request's status is left to the team.
+ */
+export const removeNgoFile = async (id, actor, fileId) => {
+    const ngoId = await inTransaction(async (client) => {
+        const request = await lockSubmitted(client, id, actor);
+        const { rows } = await client.query(
+            `DELETE FROM request_files WHERE id = $2 AND request_id = $1 AND kind IN ('ngo', 'completion')
+             RETURNING original_name, missing_item_id`,
+            [id, fileId]
+        );
+        if (!rows.length) throw new HttpError(404, 'الملف غير موجود', 'NOT_FOUND');
+        if (rows[0].missing_item_id) {
+            await client.query('UPDATE request_missing_items SET fulfilled_at = NULL WHERE id = $1', [rows[0].missing_item_id]);
+        }
+        await client.query('UPDATE service_requests SET updated_at = NOW() WHERE id = $1', [id]);
+        await logActivity(client, {
+            actorId: actor.id, action: 'request.file_delete', entityType: 'request', entityId: id,
+            summary: `${request.ref_code}: حذف مستند الجمعية «${rows[0].original_name}»`,
         });
         return request.ngo_id;
     });
@@ -597,7 +694,7 @@ const threadOwner = async (requestId, ngoId = null, viewer = null) => {
     const params = [requestId, ngoId];
     const { rows } = await pool.query(
         `SELECT r.ngo_id, r.status FROM service_requests r
-         WHERE r.id = $1 AND ($2::int IS NULL OR r.ngo_id = $2) AND ${scopeSql(ngoId ? null : viewer, params)}`,
+         WHERE r.id = $1 AND r.deleted_at IS NULL AND ($2::int IS NULL OR r.ngo_id = $2) AND ${scopeSql(ngoId ? null : viewer, params)}`,
         params
     );
     if (!rows.length || (ngoId == null && rows[0].status === 'draft')) throw notFound();

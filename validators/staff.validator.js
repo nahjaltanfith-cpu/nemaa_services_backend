@@ -18,6 +18,8 @@ const fields = {
         .messages({ 'string.email': 'البريد الإلكتروني غير صالح', 'string.empty': 'البريد الإلكتروني مطلوب', 'any.required': 'البريد الإلكتروني مطلوب' }),
     roleId: Joi.number().integer().positive()
         .messages({ 'number.base': 'اختر الدور', 'any.required': 'اختر الدور' }),
+    // An uploaded image (/uploads/...); null / empty = no picture
+    avatarUrl: Joi.string().trim().max(512).allow(null, ''),
 };
 
 export const createStaffSchema = Joi.object({
@@ -25,6 +27,7 @@ export const createStaffSchema = Joi.object({
     email: fields.email.required(),
     password: password.required(),
     roleId: fields.roleId.required(),
+    avatarUrl: fields.avatarUrl,
 });
 
 // Everything optional: the edit form sends what changed; an empty password keeps the current one.
@@ -32,6 +35,7 @@ export const updateStaffSchema = Joi.object({
     name: fields.name,
     email: fields.email,
     roleId: fields.roleId,
+    avatarUrl: fields.avatarUrl,
     isActive: Joi.boolean(),
     password: password.allow('', null).custom((value) => value || undefined),
 }).min(1).messages({ 'object.min': 'لا توجد تعديلات للحفظ' });

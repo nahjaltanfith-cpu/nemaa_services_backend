@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import * as controller from '../controllers/requests.controller.js';
 import { P } from '../config/permissions.js';
-import { NGO_ROLE, authenticate, checkRole, requireAnyPermission, requirePermission } from '../middlewares/auth.middleware.js';
+import {
+    NGO_ROLE, authenticate, checkRole, requireAnyPermission, requirePermission, requireSuperAdmin,
+} from '../middlewares/auth.middleware.js';
 import { parseIdParam } from '../middlewares/params.middleware.js';
 import { validateBody } from '../middlewares/validate.middleware.js';
 import {
@@ -117,6 +119,7 @@ import {
  *     responses: { '200': { description: Requests } }
  * /api/v1/admin/requests/{id}:
  *   get: { tags: [Requests (Admin)], summary: One request, parameters: [{ $ref: '#/components/parameters/IdParam' }], responses: { '200': { description: Request } } }
+ *   delete: { tags: [Requests (Admin)], summary: 'Archive a submitted request (super admin): hidden from the dashboard and the NGO, kept in the database', parameters: [{ $ref: '#/components/parameters/IdParam' }], responses: { '200': { description: '{ id }' }, '403': { description: Not a super admin } } }
  * /api/v1/admin/requests/{id}/assignees:
  *   get: { tags: [Requests (Admin)], summary: 'Staff the request can be assigned to (execute:orders + scope covers it). Needs assign:orders', parameters: [{ $ref: '#/components/parameters/IdParam' }], responses: { '200': { description: '[{ id, name, roleLabel }]' } } }
  * /api/v1/admin/requests/{id}/assignee:
@@ -152,6 +155,12 @@ import {
  *     summary: Remove a deliverable file
  *     parameters: [{ $ref: '#/components/parameters/IdParam' }, { in: path, name: fileId, required: true, schema: { type: integer } }]
  *     responses: { '200': { description: Request } }
+ * /api/v1/admin/requests/{id}/files/{fileId}:
+ *   delete:
+ *     tags: [Requests (Admin)]
+ *     summary: Remove a document the NGO sent (a completion file's item goes back to waiting)
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }, { in: path, name: fileId, required: true, schema: { type: integer } }]
+ *     responses: { '200': { description: Request } }
  * /api/v1/admin/requests/{id}/messages:
  *   get: { tags: [Requests (Admin)], summary: Conversation about this request, parameters: [{ $ref: '#/components/parameters/IdParam' }], responses: { '200': { description: '{ conversationOpen, messages }' } } }
  *   post: { tags: [Requests (Admin)], summary: Send a message, parameters: [{ $ref: '#/components/parameters/IdParam' }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { body: { type: string } } } } } }, responses: { '201': { description: Message } } }
@@ -179,11 +188,13 @@ export const adminRequestsRouter = Router()
     .use(authenticate, requirePermission(P.READ_ORDERS))
     .get('/', controller.adminList)
     .get('/:id', parseIdParam(), controller.adminGet)
+    .delete('/:id', parseIdParam(), requireSuperAdmin, controller.adminArchive)
     .patch('/:id/status', parseIdParam(), requireAnyPermission(...STATUS_ACTIONS), validateBody(statusSchema), controller.adminStatus)
     .get('/:id/assignees', parseIdParam(), requirePermission(P.ASSIGN_ORDERS), controller.adminAssignees)
     .patch('/:id/assignee', parseIdParam(), requirePermission(P.ASSIGN_ORDERS), validateBody(assigneeSchema), controller.adminAssign)
     .post('/:id/deliverables', parseIdParam(), requirePermission(P.UPLOAD_RESULTS), validateBody(deliverablesSchema), controller.adminAddDeliverables)
     .delete('/:id/deliverables/:fileId', parseIdParam(), parseIdParam('fileId'), requirePermission(P.UPLOAD_RESULTS), controller.adminRemoveDeliverable)
+    .delete('/:id/files/:fileId', parseIdParam(), parseIdParam('fileId'), requirePermission(P.DOCUMENT_UPDATES), controller.adminRemoveNgoFile)
     .get('/:id/messages', parseIdParam(), controller.adminMessages)
     .post('/:id/messages', parseIdParam(), requirePermission(P.DOCUMENT_UPDATES), validateBody(requestMessageSchema), controller.adminSend)
     .post('/:id/messages/read', parseIdParam(), controller.adminRead);

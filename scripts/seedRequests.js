@@ -4,7 +4,8 @@
 //   npm run seed:requests                 seed for the NGO named "ركاز الطاقة"
 //   npm run seed:requests -- --ngo=13     seed for another NGO id
 //
-// Re-running replaces the demo requests (matched by their fixed ref codes); real requests are untouched.
+// Re-running replaces that NGO's demo requests (matched by their fixed ref codes; other NGOs get an -<id>
+// suffix); real requests are untouched.
 import crypto from 'node:crypto';
 import pool from '../db.js';
 import { storeFile } from '../services/upload.service.js';
@@ -202,24 +203,26 @@ try {
         : await client.query("SELECT id, ngo_name FROM ngos WHERE ngo_name = 'ركاز الطاقة'");
     if (!ngos.length) throw new Error('NGO not found (pass --ngo=<id>)');
     const ngo = ngos[0];
+    // Other NGOs get the same set under their own codes (id suffix), so seeding one never replaces another's.
+    const refOf = (r) => (ngo.ngo_name === 'ركاز الطاقة' ? r.ref : `${r.ref}-${ngo.id}`);
     const { rows: [adminUser] } = await client.query('SELECT id FROM users ORDER BY id LIMIT 1');
     const adminId = adminUser?.id ?? null;
 
     await client.query('BEGIN');
-    await client.query('DELETE FROM service_requests WHERE ref_code = ANY($1::varchar[])', [REQUESTS.map((r) => r.ref)]);
+    await client.query('DELETE FROM service_requests WHERE ref_code = ANY($1::varchar[])', [REQUESTS.map(refOf)]);
 
     for (const r of REQUESTS) {
         const target = r.target.service
             ? (await client.query("SELECT 'service' AS type, id AS service_id, NULL AS center_id, title FROM services WHERE id = $1", [r.target.service])).rows[0]
             : (await client.query("SELECT 'center' AS type, NULL::int AS service_id, id AS center_id, title FROM enablement_centers WHERE id = $1", [r.target.center])).rows[0];
-        if (!target) throw new Error(`Target missing for ${r.ref}`);
+        if (!target) throw new Error(`Target missing for ${refOf(r)}`);
         const lastDays = Math.min(...r.history.map((h) => h.days));
         const { rows: [{ id }] } = await client.query(
             `INSERT INTO service_requests (ref_code, ngo_id, target_type, service_id, center_id, target_name, need_title,
                  summary, description, contact_method, status, completion_note, submitted_at, created_at, updated_at,
                  ngo_seen_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
-            [r.ref, ngo.id, target.type, target.service_id, target.center_id, target.title, r.needTitle, r.summary,
+            [refOf(r), ngo.id, target.type, target.service_id, target.center_id, target.title, r.needTitle, r.summary,
                 r.description, r.contact, r.status,
                 r.status === 'needs_completion' ? r.history.at(-1).note : null,
                 r.status === 'draft' ? null : at(r.created), at(r.created, 9), at(lastDays, 16),
@@ -290,7 +293,7 @@ try {
                 [id, message.from, message.from === 'admin' ? adminId : null, message.body, when, unread ? null : new Date(when.getTime() + 3600000)]
             );
         }
-        console.log(`[seed:requests] ${r.ref.padEnd(15)} ${r.status.padEnd(17)} ${r.needTitle}`);
+        console.log(`[seed:requests] ${refOf(r).padEnd(18)} ${r.status.padEnd(17)} ${r.needTitle}`);
     }
 
     await client.query('COMMIT');
