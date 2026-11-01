@@ -1,9 +1,12 @@
+import { registerMedia } from '../services/media.service.js';
 import { saveImage, saveTempPdf } from '../services/upload.service.js';
 import { HttpError } from '../utils/httpError.js';
 
 const respondWith = (save) => async (req, res) => {
     try {
         const file = await save(req.file);
+        // The registry learns about it now (as 'pending' until something uses it)
+        await registerMedia({ ...file, buffer: req.file.buffer }, req.user ? { userId: req.user.id } : {});
         return res.status(201).json({
             success: true, message: 'تم رفع الملف بنجاح', fileUrl: file.fileUrl, data: file,
         });

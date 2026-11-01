@@ -27,6 +27,8 @@ import statsRoutes from './routes/stats.routes.js';
 import { adminRequestsRouter, ngoRequestsRouter } from './routes/requests.routes.js';
 import roleRoutes, { activityRouter } from './routes/roles.routes.js';
 import staffRoutes from './routes/staff.routes.js';
+import mediaRoutes from './routes/media.routes.js';
+import { startMediaJobs } from './services/media.service.js';
 import contactRoutes from './routes/contact.routes.js';
 import { initRealtime } from './services/realtime.service.js';
 import { UPLOADS_PUBLIC_PATH, UPLOADS_ROOT } from './services/upload.service.js';
@@ -91,6 +93,7 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/activity-log', activityRouter);
 app.use('/api/contact', contactRoutes);
+app.use('/api/v1/admin/files', mediaRoutes);
 
 // ── Uploaded files (local storage only; drop this once files are served from cloud storage)
 app.use(UPLOADS_PUBLIC_PATH, express.static(UPLOADS_ROOT, {
@@ -128,6 +131,8 @@ const PORT = process.env.PORT || 3000;
 // Socket.io shares the HTTP server so REST and real-time events use one port.
 const server = createServer(app);
 initRealtime(server);
+// Media registry: initial storage scan, usage sync, and the cleanup of unused files
+startMediaJobs();
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀  Nahg Manager API running on port: ${PORT}`);
   console.log(`📚  API Docs available at: /api/docs\n`);

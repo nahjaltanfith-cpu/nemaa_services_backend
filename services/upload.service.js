@@ -81,7 +81,7 @@ export const saveTempPdf = async (file) => {
     // The server-generated UUID is the whole name: nothing from the client reaches the filesystem.
     const key = `${TEMP_DIR}/${crypto.randomUUID()}.pdf`;
     const stored = await storeFile(key, file.buffer);
-    return { ...stored, size: file.size, originalName: file.originalname };
+    return { ...stored, size: file.size, originalName: file.originalname, mimeType: PDF_MIME };
 };
 
 /** Maps a public URL produced by publicUrl() back to its storage key, or null. */
@@ -97,7 +97,7 @@ export const saveImage = async (file) => {
     const type = IMAGE_TYPES.find((candidate) => candidate.matches(file.buffer));
     if (!type) throw new HttpError(415, 'الصورة يجب أن تكون PNG أو JPG أو WebP', 'INVALID_FILE_TYPE');
     const stored = await storeFile(`images/${crypto.randomUUID()}.${type.ext}`, file.buffer);
-    return { ...stored, size: file.size, originalName: file.originalname };
+    return { ...stored, size: file.size, originalName: file.originalname, mimeType: type.mime };
 };
 
 // ── Request parsing ─────────────────────────────────────────────────────────

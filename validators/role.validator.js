@@ -31,7 +31,7 @@ export const roleSchema = Joi.object({
 });
 
 export const activityFilterSchema = Joi.object({
-    entityType: Joi.string().valid('request', 'role', 'staff', 'ngo', 'service', 'center', 'category', 'contact'),
+    entityType: Joi.string().valid('request', 'role', 'staff', 'ngo', 'service', 'center', 'category', 'contact', 'file'),
     actorId: Joi.number().integer().positive(),
     before: Joi.number().integer().positive(),
     // A time window (e.g. one day on the staff profile's timeline): from inclusive, to exclusive

@@ -1,5 +1,6 @@
 import * as ngoAuth from '../services/ngoAuth.service.js';
 import * as messages from '../services/messages.service.js';
+import { registerMedia } from '../services/media.service.js';
 import { saveImage } from '../services/upload.service.js';
 import { handle } from '../utils/handle.js';
 import { HttpError } from '../utils/httpError.js';
@@ -11,6 +12,7 @@ export const updateProfile = handle('ngo-portal profile', 200, 'تم حفظ بي
 export const uploadAvatar = handle('ngo-portal avatar', 200, 'تم تحديث صورة الجمعية', async (req) => {
     if (!req.file) throw new HttpError(400, 'اختر صورة لرفعها', 'FILE_REQUIRED');
     const image = await saveImage(req.file);
+    await registerMedia({ ...image, buffer: req.file.buffer }, { ngoId: req.user.id });
     return ngoAuth.setNgoAvatar(req.user.id, image.fileUrl);
 });
 
