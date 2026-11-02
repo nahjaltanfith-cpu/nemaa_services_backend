@@ -4,7 +4,9 @@
 //   node scripts/createTestNgo.js            create it
 //   node scripts/createTestNgo.js --dry-run  only show what would happen
 //
-// Safe to run more than once: nothing is created when the email or the registration number is already taken.
+// Runs on every deploy (see .github/workflows/deploy.yml) but acts only once: a row in schema_migrations
+// remembers it ran, so an admin who deletes the demo NGO does not get it back on the next push.
+// Nothing is created either when the email or the registration number is already taken.
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import pool from '../db.js';
@@ -52,12 +54,16 @@ const DOCUMENTS = [
     { column: 'representative_proof_key', name: 'representative_authorization.pdf', text: 'Demo NGO - Representative Authorization' },
 ];
 
+const MARKER = 'seed:demo-ngo';
 const stored = [];
 const client = await pool.connect();
 try {
+    const { rows: done } = await client.query('SELECT 1 FROM schema_migrations WHERE filename = $1', [MARKER]);
     const { rows: taken } = await client.query(
         'SELECT id, email, reg_number FROM ngos WHERE email = $1 OR reg_number = $2', [NGO.email, NGO.regNumber]);
-    if (taken.length) {
+    if (done.length) {
+        console.log('[demo-ngo] already created on an earlier deploy: nothing to do');
+    } else if (taken.length) {
         console.log(`[demo-ngo] already here (id ${taken[0].id}, ${taken[0].email}): nothing created`);
     } else {
         const { rows: regions } = await client.query('SELECT id FROM regions WHERE name = $1', [NGO.region]);
@@ -83,6 +89,7 @@ try {
             [NGO.ngoName, NGO.regNumber, NGO.fieldOfWork, NGO.representativeName, NGO.position, NGO.email, NGO.mobile,
                 await bcrypt.hash(NGO.password, 12), keys.ngo_document_key, keys.representative_proof_key, regions[0].id]
         );
+        await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [MARKER]);
         if (dryRun) {
             await client.query('ROLLBACK');
             console.log('[demo-ngo] dry run: nothing was saved');

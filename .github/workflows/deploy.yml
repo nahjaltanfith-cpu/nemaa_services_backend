@@ -59,6 +59,9 @@ jobs:
             # Pending migrations run in one transaction: if one fails nothing is applied and the
             # running API is left untouched (the reload below is skipped).
             npm run migrate
+            # One-off data: each script skips what it already added, so re-running them is harmless.
+            node scripts/importServices.js scripts/seed-data/med-04.json
+            node scripts/createTestNgo.js
             if pm2 describe nemaa-backend > /dev/null 2>&1; then
               pm2 reload nemaa-backend --update-env
             else
