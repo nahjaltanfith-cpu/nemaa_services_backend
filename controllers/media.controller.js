@@ -27,6 +27,20 @@ export const sync = handle('media sync', 200, 'تم تحديث سجل الملف
     return media.mediaStats();
 });
 
-export const purge = handle('media purge', 200, 'تم حذف الملفات غير المستخدمة', (req) => media.purgeUnused(req.user));
+// Deletes are permanent: the client must say so explicitly, so a stray or replayed call deletes nothing.
+const requireConfirm = (req) => {
+    if (req.body?.confirm !== true) {
+        throw new HttpError(400, 'الحذف نهائي ويحتاج تأكيدًا صريحًا', 'CONFIRMATION_REQUIRED');
+    }
+};
 
-export const remove = handle('media delete', 200, 'تم حذف الملف', (req) => media.deleteMedia(req.params.id, req.user));
+export const purge = handle('media purge', 200, 'تم حذف الملفات غير المستخدمة', (req) => {
+    requireConfirm(req);
+    return media.purgeUnused(req.user);
+});
+
+// A file still in use is only deleted with { force: true } (the dashboard asks for a typed confirmation first)
+export const remove = handle('media delete', 200, 'تم حذف الملف', (req) => {
+    requireConfirm(req);
+    return media.deleteMedia(req.params.id, req.user, { force: req.body.force === true });
+});

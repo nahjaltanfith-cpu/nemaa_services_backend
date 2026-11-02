@@ -324,7 +324,7 @@ const PROTECTED_USAGES = new Set(['ngo_document', 'ngo_proof']);
  * Request files lose their row (a completion file's item goes back to "waiting");
  * images / avatars are cleared. NGO registration documents can't be deleted.
  */
-export const deleteMedia = async (id, actor) => {
+export const deleteMedia = async (id, actor, { force = false } = {}) => {
     const client = await pool.connect();
     let file;
     try {
@@ -336,6 +336,9 @@ export const deleteMedia = async (id, actor) => {
         const { rows: refs } = await client.query(`SELECT * FROM (${REFERENCES_SQL}) r WHERE key = $1`, [file.storage_key]);
         if (refs.some((ref) => PROTECTED_USAGES.has(ref.usage))) {
             throw new HttpError(409, 'هذا مستند تسجيل إلزامي للجمعية ولا يمكن حذفه من هنا', 'PROTECTED_FILE');
+        }
+        if (refs.length && !force) {
+            throw new HttpError(409, 'الملف مستخدم حاليًا، وحذفه يحتاج تأكيدًا إضافيًا', 'FILE_IN_USE');
         }
         const url = publicUrl(file.storage_key);
         const { rows: removedFiles } = await client.query(

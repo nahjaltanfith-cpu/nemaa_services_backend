@@ -65,12 +65,13 @@ export const registerSchema = Joi.object({
     }).default({}),
     ngo: Joi.object({
         ngoName: text('اسم الجمعية', 3, 200),
-        // National Center registration number: 10 digits starting with 1000 (e.g. 1000700100).
-        regNumber: Joi.string().trim().pattern(/^1000\d{6}$/).required()
+        // Registration number: digits only (any length up to the column's 20).
+        regNumber: Joi.string().trim().pattern(/^\d+$/).max(20).required()
             .messages({
                 'string.empty': 'رقم التسجيل الرسمي مطلوب',
                 'any.required': 'رقم التسجيل الرسمي مطلوب',
-                'string.pattern.base': 'رقم التسجيل 10 أرقام ويبدأ بـ 1000، مثل 1000700100',
+                'string.pattern.base': 'رقم التسجيل أرقام فقط',
+                'string.max': 'رقم التسجيل طويل جدًا',
             }),
         fieldOfWork: text('مجال العمل', 1, 200),
         // One of the regions table (migration 028).
