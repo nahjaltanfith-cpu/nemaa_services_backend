@@ -4,8 +4,10 @@
 //   node scripts/importServices.js scripts/seed-data/services-export.json --dry-run  only show what would happen
 //
 // Safe to run more than once: a service whose code already exists is left untouched (admin edits are
-// kept). The category is matched by name (created if missing); centers are linked only when they exist.
+// kept), and a file imported once is remembered in schema_migrations, so a service deleted afterwards
+// is not brought back by the next run (the deploy runs it on every push). The category is matched by name (created if missing); centers are linked only when they exist.
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import pool from '../db.js';
 
 const file = process.argv[2];
@@ -15,10 +17,16 @@ if (!file) {
     process.exit(1);
 }
 const { services } = JSON.parse(await readFile(file, 'utf8'));
+const marker = `seed:${path.basename(file)}`;
 
 const client = await pool.connect();
 try {
     await client.query('BEGIN');
+    const { rows: done } = await client.query('SELECT 1 FROM schema_migrations WHERE filename = $1', [marker]);
+    if (done.length) {
+        console.log(`[import] ${path.basename(file)} was imported before: nothing to do`);
+        services.length = 0;
+    }
     for (const service of services) {
         const { rows: existing } = await client.query('SELECT id FROM services WHERE code = $1', [service.code]);
         if (existing.length) {
@@ -55,6 +63,7 @@ try {
             + `${centers.length ? `, centers: ${centers.map((center) => center.id).join(', ')}` : ''}`
             + `${skipped.length ? ` · centers not found here: ${skipped.join(', ')}` : ''}`);
     }
+    if (services.length) await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [marker]);
     if (dryRun) {
         await client.query('ROLLBACK');
         console.log('[import] dry run: nothing was saved');
