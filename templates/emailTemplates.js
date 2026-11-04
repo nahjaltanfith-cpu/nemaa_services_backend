@@ -3,7 +3,7 @@
 // plain-text version for clients that don't show HTML. Every interpolated value is escaped.
 
 const BRAND = '#00262D';
-const PLATFORM = 'منصة كفاءة';
+const PLATFORM = 'كفاءة';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -23,15 +23,6 @@ const details = (rows) => `
       <td style="padding:10px 14px;font-size:14px;font-weight:600;color:#0f172a;${index ? 'border-top:1px solid #e2e8f0;' : ''}">${escapeHtml(value)}</td>
     </tr>`).join('')}
   </table>`;
-
-// A highlighted block for the team's notes / what the NGO must fix.
-const callout = (title, body, items = []) => `
-  <div style="margin:0 0 18px;padding:14px 16px;border:1px solid #fde68a;background:#fffbeb;border-radius:8px;">
-    <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#92400e;">${escapeHtml(title)}</p>
-    ${body ? `<p style="margin:0;font-size:14px;line-height:1.8;color:#78350f;white-space:pre-line;">${escapeHtml(body)}</p>` : ''}
-    ${items.length ? `<ul style="margin:${body ? '8px' : '0'} 0 0;padding:0 18px 0 0;font-size:14px;line-height:1.9;color:#78350f;">
-      ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}
-  </div>`;
 
 // A neutral block for text someone else wrote (e.g. a contact-form message), line breaks kept.
 const quote = (body) => `
@@ -76,108 +67,169 @@ const layout = ({ preheader, heading, body }) => `<!doctype html>
 
 const textOf = (lines) => [...lines.filter(Boolean), '', `— ${PLATFORM} (رسالة آلية)`].join('\n');
 
-// ── Auth ────────────────────────────────────────────────────────────────────
+// ── Wording ─────────────────────────────────────────────────────────────────
+// Subjects, texts and buttons follow «رسائل البريد.docx». Messages to NGOs end with the team signature.
+
+// One requirement per bullet: the team's notes are split on line breaks (a single line stays one bullet).
+const toItems = (text) => String(text ?? '').split(/\r?\n/).map((line) => line.replace(/^[\s•\-–*]+/, '').trim()).filter(Boolean);
+
+const bullets = (items) => (items.length ? `
+  <ul style="margin:0 0 18px;padding:0 20px 0 0;font-size:15px;line-height:1.9;color:#0f172a;">
+    ${items.map((item) => `<li style="margin:0 0 4px;">${escapeHtml(item)}</li>`).join('')}
+  </ul>` : '');
+
+const SIGNATURE_LINES = ['فريق كفاءة', 'جمعية نماء لتطوير القطاع غير الربحي'];
+const signature = `
+  <p style="margin:22px 0 0;font-size:14px;line-height:1.8;color:#334155;">
+    ${SIGNATURE_LINES.map(escapeHtml).join('<br>')}
+  </p>`;
+
+// Request number / service or track / NGO, as the short table the doc asks for
+const requestTable = ({ refCode, targetName, ngoName }) =>
+    details([['رقم الطلب', refCode], ['الخدمة أو المسار', targetName], ['الجمعية', ngoName]]);
+
+// The code: large, monospaced and selectable in one tap so it can be copied
+const codeBlock = (code) => `
+  <p style="margin:0 0 18px;padding:16px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:${BRAND};font-family:Consolas,monospace;-webkit-user-select:all;user-select:all;" dir="ltr">${escapeHtml(code)}</p>`;
+
+// ── Auth (to the NGO) ───────────────────────────────────────────────────────
 const OTP_PURPOSES = {
-    verify_email: { subject: 'رمز تأكيد البريد الإلكتروني', intro: 'استخدم الرمز التالي لتأكيد بريدك الإلكتروني في منصة كفاءة:' },
-    reset_password: { subject: 'رمز استعادة كلمة المرور', intro: 'استخدم الرمز التالي لتعيين كلمة مرور جديدة لحسابك:' },
+    verify_email: {
+        subject: 'رمز تأكيد بريدك الإلكتروني في كفاءة',
+        before: ['مرحبًا،', 'لإكمال التسجيل في كفاءة، أدخل رمز التأكيد التالي:'],
+        ignore: 'إذا لم تطلب التسجيل، يمكنك تجاهل هذه الرسالة. لا تشارك الرمز مع أي شخص.',
+    },
+    reset_password: {
+        subject: 'رمز إعادة تعيين كلمة المرور في كفاءة',
+        before: ['تلقّينا طلبًا لإعادة تعيين كلمة المرور لحسابك في كفاءة.', 'أدخل الرمز التالي لإتمام الطلب:'],
+        ignore: 'إذا لم تطلب إعادة تعيين كلمة المرور، يمكنك تجاهل هذه الرسالة؛ ستبقى كلمة مرورك دون تغيير. لا تشارك الرمز مع أي شخص.',
+    },
 };
 
 export const otpEmail = ({ code, purpose, expiresInMinutes }) => {
-    const { subject, intro } = OTP_PURPOSES[purpose];
+    const { subject, before, ignore } = OTP_PURPOSES[purpose];
+    const expiry = `تنتهي صلاحية الرمز خلال ${expiresInMinutes} دقائق.`;
     return {
-        subject: `${subject} - ${PLATFORM}`,
+        subject,
         html: layout({
-            preheader: `${subject}: صالح لمدة ${expiresInMinutes} دقائق`,
+            preheader: `${subject}: ${expiry}`,
             heading: subject,
-            body: `${paragraph(intro)}
-              <p style="margin:0 0 18px;padding:16px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;text-align:center;font-size:30px;font-weight:700;letter-spacing:8px;color:${BRAND};font-family:Consolas,monospace;" dir="ltr">${escapeHtml(code)}</p>
-              ${paragraph(`الرمز صالح لمدة ${expiresInMinutes} دقائق. إذا لم تطلب هذا الرمز فتجاهل الرسالة؛ حسابك آمن.`)}`,
+            body: `${before.map(paragraph).join('')}
+              ${codeBlock(code)}
+              ${paragraph(expiry)}
+              ${paragraph(ignore)}
+              ${signature}`,
         }),
-        text: textOf([intro, '', code, '', `الرمز صالح لمدة ${expiresInMinutes} دقائق. إذا لم تطلبه فتجاهل الرسالة.`]),
+        text: textOf([...before, '', code, '', expiry, ignore, '', ...SIGNATURE_LINES]),
     };
 };
 
-// ── NGO account ─────────────────────────────────────────────────────────────
-export const ngoNeedsDocumentsEmail = ({ ngoName, notes, url }) => ({
-    subject: `مطلوب استكمال بيانات حساب الجمعية - ${PLATFORM}`,
-    html: layout({
-        preheader: 'راجع ملاحظات فريق نماء واستكمل بيانات حسابك',
-        heading: 'مطلوب استكمال بيانات الحساب',
-        body: `${paragraph(`مرحبًا ${ngoName}،`)}
-          ${paragraph('راجع فريق نماء طلب تسجيل جمعيتكم، ويحتاج إلى استكمال قبل اعتماد الحساب.')}
-          ${callout('ملاحظات الفريق', notes)}
-          ${button('استكمال البيانات', url)}`,
-    }),
-    text: textOf([`مرحبًا ${ngoName}،`, 'راجع فريق نماء طلب تسجيل جمعيتكم ويحتاج إلى استكمال قبل الاعتماد.', '', 'ملاحظات الفريق:', notes, '', url]),
-});
+// ── NGO account (to the NGO) ────────────────────────────────────────────────
+export const ngoNeedsDocumentsEmail = ({ ngoName, notes, url }) => {
+    const items = toItems(notes);
+    return {
+        subject: `يلزم استكمال بيانات حساب ${ngoName} في كفاءة`,
+        html: layout({
+            preheader: 'نأمل استكمال متطلبات حساب الجمعية لمتابعة مراجعته',
+            heading: 'استكمال بيانات حساب الجمعية',
+            body: `${paragraph(`مرحبًا بفريق ${ngoName}،`)}
+              ${paragraph('بعد مراجعة بيانات حساب الجمعية، نأمل استكمال المتطلبات التالية لمتابعة مراجعة الحساب:')}
+              ${bullets(items)}
+              ${paragraph('يمكنكم تحديث البيانات من خلال الزر أدناه.')}
+              ${button('استكمال بيانات الجمعية', url)}
+              ${signature}`,
+        }),
+        text: textOf([`مرحبًا بفريق ${ngoName}،`, 'بعد مراجعة بيانات حساب الجمعية، نأمل استكمال المتطلبات التالية لمتابعة مراجعة الحساب:',
+            ...items.map((item) => `- ${item}`), '', 'يمكنكم تحديث البيانات من خلال الرابط:', url, '', ...SIGNATURE_LINES]),
+    };
+};
 
 export const ngoApprovedEmail = ({ ngoName, url }) => ({
-    subject: `تم اعتماد حساب الجمعية - ${PLATFORM}`,
+    subject: `تم اعتماد حساب ${ngoName} في كفاءة`,
     html: layout({
-        preheader: 'حسابكم معتمد ويمكنكم الآن تقديم الطلبات',
+        preheader: 'حساب جمعيتكم معتمد ويمكنكم الآن تقديم طلبات الاستفادة',
         heading: 'تم اعتماد حساب الجمعية',
-        body: `${paragraph(`مرحبًا ${ngoName}،`)}
-          ${paragraph('يسعدنا إبلاغكم باعتماد حساب جمعيتكم في منصة كفاءة. يمكنكم الآن تقديم طلبات الخدمات ومراكز التمكين ومتابعتها.')}
-          ${button('الدخول إلى المنصة', url)}`,
+        body: `${paragraph(`مرحبًا بفريق ${ngoName}،`)}
+          ${paragraph('يسعدنا إشعاركم باعتماد حساب جمعيتكم في كفاءة.')}
+          ${paragraph('يمكنكم الآن استعراض الخدمات المتاحة وتقديم طلبات الاستفادة ومتابعتها من حساب الجمعية.')}
+          ${button('الدخول إلى حساب الجمعية', url)}
+          ${signature}`,
     }),
-    text: textOf([`مرحبًا ${ngoName}،`, 'تم اعتماد حساب جمعيتكم في منصة كفاءة، ويمكنكم الآن تقديم الطلبات.', '', url]),
+    text: textOf([`مرحبًا بفريق ${ngoName}،`, 'يسعدنا إشعاركم باعتماد حساب جمعيتكم في كفاءة.',
+        'يمكنكم الآن استعراض الخدمات المتاحة وتقديم طلبات الاستفادة ومتابعتها من حساب الجمعية.', '', url, '', ...SIGNATURE_LINES]),
 });
 
 // ── Service requests (to the NGO) ───────────────────────────────────────────
-export const requestNeedsCompletionEmail = ({ ngoName, refCode, needTitle, targetName, items, note, url }) => ({
-    subject: `مطلوب استكمال الطلب ${refCode} - ${PLATFORM}`,
-    html: layout({
-        preheader: `الطلب ${refCode} يحتاج إلى مستندات أو معلومات إضافية`,
-        heading: 'مطلوب استكمال الطلب',
-        body: `${paragraph(`مرحبًا ${ngoName}،`)}
-          ${paragraph('راجع فريق نماء طلبكم ويحتاج إلى استكمال حتى نتمكن من متابعة العمل عليه.')}
-          ${details([['رقم الطلب', refCode], ['عنوان الاحتياج', needTitle], ['الخدمة / المركز', targetName]])}
-          ${callout('المطلوب منكم', note, items)}
-          ${button('استكمال الطلب', url)}`,
-    }),
-    text: textOf([`مرحبًا ${ngoName}،`, `الطلب ${refCode} (${needTitle}) يحتاج إلى استكمال.`, '',
-        'المطلوب:', ...items.map((item) => `- ${item}`), note, '', url]),
-});
+// inExecution: the work had already started ("متابعة تنفيذه"), else it is still in review.
+export const requestNeedsCompletionEmail = ({ ngoName, refCode, targetName, items, note, inExecution, url }) => {
+    const requirements = [...items, ...toItems(note)];
+    const purpose = inExecution ? 'متابعة تنفيذه' : 'متابعة مراجعة الطلب';
+    const intro = `يحتاج طلبكم إلى استكمال المتطلبات التالية حتى نتمكن من ${purpose}:`;
+    return {
+        subject: `يلزم استكمال طلبكم رقم ${refCode} في كفاءة`,
+        html: layout({
+            preheader: `طلبكم رقم ${refCode} يحتاج إلى استكمال`,
+            heading: 'استكمال طلب الخدمة',
+            body: `${paragraph(`مرحبًا بفريق ${ngoName}،`)}
+              ${paragraph(intro)}
+              ${bullets(requirements)}
+              ${requestTable({ refCode, targetName, ngoName })}
+              ${paragraph('يرجى استكمال المطلوب من خلال الزر أدناه.')}
+              ${button('استكمال الطلب', url)}
+              ${signature}`,
+        }),
+        text: textOf([`مرحبًا بفريق ${ngoName}،`, intro, ...requirements.map((item) => `- ${item}`), '',
+            `رقم الطلب: ${refCode}`, `الخدمة أو المسار: ${targetName}`, '', 'يرجى استكمال المطلوب من خلال الرابط:', url, '', ...SIGNATURE_LINES]),
+    };
+};
 
-export const requestCompletedEmail = ({ ngoName, refCode, needTitle, targetName, url }) => ({
-    subject: `تم إنجاز الطلب ${refCode} - ${PLATFORM}`,
+export const requestCompletedEmail = ({ ngoName, refCode, targetName, url }) => ({
+    subject: `تم إنجاز طلبكم رقم ${refCode} في كفاءة`,
     html: layout({
-        preheader: `اكتمل العمل على الطلب ${refCode} والنتيجة متاحة على المنصة`,
+        preheader: `المخرجات وملفات التسليم للطلب ${refCode} متاحة في حساب الجمعية`,
         heading: 'تم إنجاز طلبكم',
-        body: `${paragraph(`مرحبًا ${ngoName}،`)}
-          ${paragraph('اكتمل العمل على طلبكم، ويمكنكم الاطلاع على المخرجات وملفات التسليم من صفحة الطلب.')}
-          ${details([['رقم الطلب', refCode], ['عنوان الاحتياج', needTitle], ['الخدمة / المركز', targetName]])}
-          ${button('عرض الطلب والمخرجات', url)}`,
+        body: `${paragraph(`مرحبًا بفريق ${ngoName}،`)}
+          ${paragraph(`تم إنجاز طلبكم لخدمة ${targetName}، وأصبحت المخرجات وملفات التسليم متاحة في حساب الجمعية.`)}
+          ${requestTable({ refCode, targetName, ngoName })}
+          ${paragraph('يمكنكم الاطلاع عليها وتنزيلها من خلال الزر أدناه.')}
+          ${button('عرض الطلب والمخرجات', url)}
+          ${paragraph('نسعد بخدمتكم.')}
+          ${signature}`,
     }),
-    text: textOf([`مرحبًا ${ngoName}،`, `تم إنجاز الطلب ${refCode} (${needTitle}). المخرجات متاحة على صفحة الطلب.`, '', url]),
+    text: textOf([`مرحبًا بفريق ${ngoName}،`, `تم إنجاز طلبكم لخدمة ${targetName}، وأصبحت المخرجات وملفات التسليم متاحة في حساب الجمعية.`,
+        `رقم الطلب: ${refCode}`, '', 'يمكنكم الاطلاع عليها وتنزيلها من خلال الرابط:', url, '', 'نسعد بخدمتكم.', '', ...SIGNATURE_LINES]),
 });
 
 // ── Service requests (to staff) ─────────────────────────────────────────────
-export const newRequestStaffEmail = ({ staffName, ngoName, refCode, needTitle, targetName, url }) => ({
-    subject: `طلب جديد ${refCode} من ${ngoName}`,
+export const newRequestStaffEmail = ({ ngoName, refCode, targetName, url }) => ({
+    subject: `طلب جديد رقم ${refCode} من ${ngoName}`,
     html: layout({
-        preheader: `${ngoName} أرسلت طلبًا جديدًا على ${targetName}`,
-        heading: 'طلب جديد بانتظار المراجعة',
-        body: `${paragraph(`مرحبًا ${staffName}،`)}
-          ${paragraph('وصل طلب جديد ضمن نطاق عملك في لوحة التحكم.')}
-          ${details([['الجمعية', ngoName], ['الخدمة / المركز', targetName], ['عنوان الاحتياج', needTitle], ['رقم الطلب', refCode]])}
-          ${button('فتح الطلب في لوحة التحكم', url)}`,
+        preheader: `${ngoName} أرسلت طلبًا جديدًا للاستفادة من ${targetName}`,
+        heading: 'طلب جديد',
+        body: `${paragraph(`ورد طلب جديد من ${ngoName} للاستفادة من ${targetName}.`)}
+          ${requestTable({ refCode, targetName, ngoName })}
+          ${paragraph('يرجى مراجعة بيانات الطلب ومرفقاته وتحديد الإجراء المناسب.')}
+          ${button('مراجعة الطلب', url)}`,
     }),
-    text: textOf([`مرحبًا ${staffName}،`, `طلب جديد ${refCode} من ${ngoName} على ${targetName}: ${needTitle}`, '', url]),
+    text: textOf([`ورد طلب جديد من ${ngoName} للاستفادة من ${targetName}.`, `رقم الطلب: ${refCode}`, '',
+        'يرجى مراجعة بيانات الطلب ومرفقاته وتحديد الإجراء المناسب.', url]),
 });
 
 // ── Contact form (to the team inbox) ────────────────────────────────────────
 export const contactRequestEmail = ({ typeLabel, fullName, organizationName, email, phone, message, url }) => ({
-    subject: `رسالة جديدة من تواصل معنا: ${typeLabel} - ${fullName}`,
+    subject: `رسالة تواصل جديدة بشأن ${typeLabel} من ${fullName}`,
     html: layout({
-        preheader: `${fullName} أرسل رسالة (${typeLabel}) من صفحة تواصل معنا`,
-        heading: 'رسالة جديدة من صفحة تواصل معنا',
-        body: `${details([['نوع الاستفسار', typeLabel], ['الاسم', fullName], ['الجمعية / الجهة', organizationName],
-            ['البريد الإلكتروني', email], ['الجوال / واتساب', phone]])}
+        preheader: `${fullName} أرسل رسالة (${typeLabel}) عبر نموذج تواصل معنا`,
+        heading: 'رسالة تواصل جديدة',
+        body: `${paragraph('وردت رسالة جديدة عبر نموذج “تواصل معنا” في كفاءة.')}
+          ${details([['اسم المرسل', fullName], ['البريد الإلكتروني', email], ['نوع الرسالة', typeLabel],
+            ['الجمعية / الجهة', organizationName], ['الجوال / واتساب', phone]])}
+          <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#64748b;">نص الرسالة</p>
           ${quote(message)}
-          ${button('متابعة الرسالة في لوحة التحكم', url)}`,
+          ${paragraph('يرجى الاطلاع عليها ومتابعتها.')}
+          ${button('عرض الرسالة ومتابعتها', url)}`,
     }),
-    text: textOf([`رسالة جديدة من تواصل معنا (${typeLabel})`, '', `الاسم: ${fullName}`,
-        organizationName && `الجمعية / الجهة: ${organizationName}`, `البريد الإلكتروني: ${email}`,
-        phone && `الجوال / واتساب: ${phone}`, '', message, '', url]),
+    text: textOf(['وردت رسالة جديدة عبر نموذج “تواصل معنا” في كفاءة.', '', `اسم المرسل: ${fullName}`, `البريد الإلكتروني: ${email}`,
+        `نوع الرسالة: ${typeLabel}`, organizationName && `الجمعية / الجهة: ${organizationName}`, phone && `الجوال / واتساب: ${phone}`,
+        '', 'نص الرسالة:', message, '', 'يرجى الاطلاع عليها ومتابعتها.', url]),
 });

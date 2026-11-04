@@ -25,11 +25,13 @@ const safely = (label, work) => work().catch((error) => console.error(`[notify] 
 
 // ── NGO account ─────────────────────────────────────────────────────────────
 /**
- * The team set the NGO's account status. needs_documents: every time (new notes = new feedback);
- * approved: only the first time it becomes approved.
+ * The team set the NGO's account status. needs_documents: when it is newly asked for or the
+ * requirements (notes) changed, not on a save that changes nothing; approved: only the first time.
  */
-export const notifyNgoAccountStatus = (ngo, previousStatus) => safely('ngo status', async () => {
-    if (ngo.accountStatus === 'needs_documents') {
+export const notifyNgoAccountStatus = (ngo, before) => safely('ngo status', async () => {
+    const previousStatus = before.accountStatus;
+    const newRequirements = previousStatus !== 'needs_documents' || (before.adminNotes || '') !== (ngo.adminNotes || '');
+    if (ngo.accountStatus === 'needs_documents' && newRequirements) {
         queueEmail({ to: ngo.email, ...ngoNeedsDocumentsEmail({ ngoName: ngo.ngoName, notes: ngo.adminNotes, url: `${SITE_URL()}/dashboard/status` }) });
     } else if (ngo.accountStatus === 'approved' && previousStatus !== 'approved') {
         queueEmail({ to: ngo.email, ...ngoApprovedEmail({ ngoName: ngo.ngoName, url: `${SITE_URL()}/dashboard` }) });
@@ -46,20 +48,33 @@ const loadRequest = async (requestId) => {
     return rows[0] || null;
 };
 
-/** A status change by the team: email the NGO only for "needs completion" and "completed". */
+/**
+ * A status change by the team: email the NGO only for "needs completion" and "completed".
+ * Needs completion: when newly asked for, or when new items are added to an open round.
+ */
 export const notifyRequestStatus = (requestId, { from, to, missingItems = [] }) => safely('request status', async () => {
-    if (from === to || !['needs_completion', 'completed'].includes(to)) return;
+    if (!['needs_completion', 'completed'].includes(to)) return;
+    if (from === to && !(to === 'needs_completion' && missingItems.length)) return;
     const request = await loadRequest(requestId);
     if (!request) return;
     const common = {
         ngoName: request.ngo_name, refCode: request.ref_code, needTitle: request.need_title,
         targetName: request.target_name, url: `${SITE_URL()}/dashboard/requests/${request.id}`,
     };
+    if (to === 'completed') {
+        queueEmail({ to: request.ngo_email, ...requestCompletedEmail(common) });
+        return;
+    }
+    // Everything still asked for in this round, and whether the work had already started
+    const [{ rows: open }, { rows: started }] = await Promise.all([
+        pool.query('SELECT name FROM request_missing_items WHERE request_id = $1 AND fulfilled_at IS NULL ORDER BY id', [requestId]),
+        pool.query("SELECT 1 FROM request_status_log WHERE request_id = $1 AND status = 'in_progress' LIMIT 1", [requestId]),
+    ]);
     queueEmail({
         to: request.ngo_email,
-        ...(to === 'needs_completion'
-            ? requestNeedsCompletionEmail({ ...common, items: missingItems, note: request.completion_note })
-            : requestCompletedEmail(common)),
+        ...requestNeedsCompletionEmail({
+            ...common, items: open.map((row) => row.name), note: request.completion_note, inExecution: started.length > 0,
+        }),
     });
 });
 

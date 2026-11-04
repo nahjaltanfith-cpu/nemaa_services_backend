@@ -32,9 +32,9 @@ const invalidOtp = () => new HttpError(400, 'رمز التحقق غير صحيح
 // Keeps only keys that point to a stored upload, so a failed or forged upload
 // simply leaves that document missing instead of rejecting the registration.
 const resolveDocumentKeys = async (documents = {}) => Object.fromEntries(
-    await Promise.all(DOCUMENTS.map(async ({ key, column }) => {
+    await Promise.all(DOCUMENTS.map(async ({ key, column, pattern }) => {
         const value = documents[key];
-        return [column, value && await fileExists(value) ? value : null];
+        return [column, value && await fileExists(value, pattern) ? value : null];
     }))
 );
 
@@ -185,7 +185,7 @@ export const resetPassword = async ({ email, otp_code: code, new_password: newPa
 export const attachNgoDocument = async (id, documentType, key) => {
     const document = DOCUMENTS.find((doc) => doc.key === documentType);
     if (!document) throw new HttpError(404, 'نوع المستند غير معروف', 'UNKNOWN_DOCUMENT');
-    if (!(await fileExists(key))) {
+    if (!(await fileExists(key, document.pattern))) {
         throw new HttpError(400, 'الملف غير موجود، ارفعه مرة أخرى', 'FILE_NOT_FOUND');
     }
     // document.column comes from the DOCUMENTS whitelist, never from the request.

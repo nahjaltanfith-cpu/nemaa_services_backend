@@ -99,7 +99,11 @@ app.use('/api/v1/admin/files', mediaRoutes);
 app.use(UPLOADS_PUBLIC_PATH, express.static(UPLOADS_ROOT, {
   index: false,
   dotfiles: 'deny',
-  setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+  setHeaders: (res, filePath) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // Only PDFs and images open in the browser; anything else (Office, Illustrator…) is downloaded
+    if (!/\.(pdf|png|jpe?g|webp)$/i.test(filePath)) res.setHeader('Content-Disposition', 'attachment');
+  },
 }));
 // app.use('/api/departments', departmentRoutes);
 // app.use('/api/employees', employeeRoutes);

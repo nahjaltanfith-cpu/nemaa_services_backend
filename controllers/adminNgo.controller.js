@@ -38,7 +38,7 @@ export const updateStatus = handle('admin-ngo status', 200, 'تم تحديث ح�
             : `جمعية «${ngo.ngoName}»: من «${label(before.accountStatus)}» إلى «${label(ngo.accountStatus)}»`,
         details: { from: before.accountStatus, to: ngo.accountStatus, notes: req.body.notes || null },
     });
-    notifyNgoAccountStatus(ngo, before.accountStatus);
+    notifyNgoAccountStatus(ngo, before);
     return ngo;
 });
 

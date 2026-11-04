@@ -6,6 +6,7 @@ import { HttpError } from '../utils/httpError.js';
 import { countsBy, likeTerm, pageSql } from '../utils/pagination.js';
 import { logActivity } from './activityLog.service.js';
 import { UPLOADS_PUBLIC_PATH, UPLOADS_ROOT, deleteFiles, publicUrl } from './upload.service.js';
+import { EXCEPTION_TYPES } from './fileSafety.service.js';
 
 /**
  * Media registry (table media_files): what is stored, how big it is, and what uses it.
@@ -13,7 +14,10 @@ import { UPLOADS_PUBLIC_PATH, UPLOADS_ROOT, deleteFiles, publicUrl } from './upl
  * owner / usage / status from them, so no domain service has to report attach / detach events.
  */
 
-const MIME_BY_EXT = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+const MIME_BY_EXT = {
+    ...Object.fromEntries(Object.entries(EXCEPTION_TYPES).map(([ext, type]) => [ext, type.mime])),
+    jpeg: 'image/jpeg', webp: 'image/webp',
+};
 const mimeOf = (key) => MIME_BY_EXT[path.extname(key).slice(1).toLowerCase()] || 'application/octet-stream';
 const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 const GRACE_HOURS = Number(process.env.MEDIA_CLEANUP_HOURS) || 24;
@@ -26,13 +30,13 @@ const JOB_LOCK = 7351;
  * already succeeded, and the next sync would register the file anyway.
  * uploader: { userId } for staff, { ngoId } for an NGO, {} when anonymous (sign-up documents).
  */
-export const registerMedia = async ({ key, originalName, mimeType, buffer, size }, uploader = {}) => {
+export const registerMedia = async ({ key, originalName, mimeType, buffer, size, isException = false }, uploader = {}) => {
     try {
         await pool.query(
-            `INSERT INTO media_files (storage_key, original_name, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_by_ngo_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (storage_key) DO NOTHING`,
+            `INSERT INTO media_files (storage_key, original_name, mime_type, size_bytes, sha256, uploaded_by_user_id, uploaded_by_ngo_id, is_exception)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (storage_key) DO NOTHING`,
             [key, originalName?.slice(0, 255) || null, mimeType || mimeOf(key), size ?? buffer?.length ?? 0,
-                buffer ? sha256(buffer) : null, uploader.userId || null, uploader.ngoId || null]
+                buffer ? sha256(buffer) : null, uploader.userId || null, uploader.ngoId || null, isException]
         );
     } catch (error) {
         console.error('[media] could not register', key, error.message);
@@ -244,6 +248,7 @@ const toMedia = (row) => ({
     usage: row.usage,
     status: row.status,
     source: row.source,
+    isException: Boolean(row.is_exception),
     owner: row.status === 'attached' ? ownerOf(row) : null,
     uploadedBy: row.uploader_name || row.uploader_ngo_name || null,
     createdAt: row.created_at,

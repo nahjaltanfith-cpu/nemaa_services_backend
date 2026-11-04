@@ -1,6 +1,6 @@
 import Joi from 'joi';
 import { pageFields } from '../utils/pagination.js';
-import { TEMP_PDF_KEY_PATTERN } from '../services/upload.service.js';
+import { TEMP_FILE_KEY_PATTERN } from '../services/upload.service.js';
 
 export const REQUEST_STATUSES = ['draft', 'under_study', 'needs_completion', 'in_progress', 'completed'];
 // Statuses an admin can move a submitted request to (drafts belong to the NGO).
@@ -8,9 +8,9 @@ export const ADMIN_STATUSES = ['under_study', 'needs_completion', 'in_progress',
 export const CONTACT_METHODS = ['call', 'meeting', 'session'];
 const MAX_FILES = 30;
 
-// A PDF already sent to POST /api/upload: its key plus what to show for it.
+// A file already sent to POST /api/upload (or /api/upload/exception): its key plus what to show for it.
 const uploadedFile = Joi.object({
-    key: Joi.string().pattern(TEMP_PDF_KEY_PATTERN).required()
+    key: Joi.string().pattern(TEMP_FILE_KEY_PATTERN).required()
         .messages({ 'string.pattern.base': 'ملف غير صالح، ارفعه مرة أخرى', 'any.required': 'ملف غير صالح، ارفعه مرة أخرى' }),
     name: Joi.string().trim().max(255).required(),
     size: Joi.number().integer().min(0).max(50 * 1024 * 1024).default(0),

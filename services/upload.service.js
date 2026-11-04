@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import multer from 'multer';
 import { HttpError } from '../utils/httpError.js';
+import { EXCEPTION_EXTENSIONS, EXCEPTION_HARD_MAX_MB, inspectExceptionFile } from './fileSafety.service.js';
+import { getUploadExceptions } from './settings.service.js';
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const PDF_MIME = 'application/pdf';
@@ -17,6 +19,10 @@ const TEMP_DIR = 'temp';
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 // Only keys this module generated are accepted back from clients.
 export const TEMP_PDF_KEY_PATTERN = new RegExp(`^temp/${UUID}\\.pdf$`);
+// Registration documents that may also be a photo (the NGO license): PDF, PNG, JPG or WebP.
+export const TEMP_DOCUMENT_KEY_PATTERN = new RegExp(`^temp/${UUID}\\.(pdf|png|jpg|webp)$`);
+// Request attachments / deliverables: the default PDF or a type allowed as an upload exception.
+export const TEMP_FILE_KEY_PATTERN = new RegExp(`^temp/${UUID}\\.(${EXCEPTION_EXTENSIONS.join('|')})$`);
 // Uploaded images, plus the fixed names used by the seed script (services/seed-01.png).
 export const IMAGE_KEY_PATTERN = new RegExp(`^(images/${UUID}|services/seed-\\d{2})\\.(png|jpg|webp)$`);
 
@@ -84,6 +90,30 @@ export const saveTempPdf = async (file) => {
     return { ...stored, size: file.size, originalName: file.originalname, mimeType: PDF_MIME };
 };
 
+/**
+ * An upload exception (bigger than the default, or another allowed type): checked against the
+ * admin's settings and its content (fileSafety.service.js), then stored like any temp upload.
+ */
+export const saveExceptionFile = async (file, settings) => {
+    if (!file) throw new HttpError(400, 'لم يتم إرفاق ملف (الحقل file)', 'FILE_REQUIRED');
+    const { ext, mime } = inspectExceptionFile(file, settings);
+    const stored = await storeFile(`${TEMP_DIR}/${crypto.randomUUID()}.${ext}`, file.buffer);
+    return { ...stored, size: file.size, originalName: file.originalname, mimeType: mime, isException: true };
+};
+
+/**
+ * A registration document that may be a PDF or a photo of it (PNG / JPG / WebP), told apart by
+ * content. Stored under temp/ like the PDFs, so registration and attach treat it the same way.
+ */
+export const saveTempDocument = async (file) => {
+    if (!file) throw new HttpError(400, 'لم يتم إرفاق ملف (الحقل file)', 'FILE_REQUIRED');
+    if (file.buffer.subarray(0, PDF_SIGNATURE.length).equals(PDF_SIGNATURE)) return saveTempPdf(file);
+    const type = IMAGE_TYPES.find((candidate) => candidate.matches(file.buffer));
+    if (!type) throw new HttpError(415, 'الملف يجب أن يكون PDF أو صورة (PNG أو JPG)', 'INVALID_FILE_TYPE');
+    const stored = await storeFile(`${TEMP_DIR}/${crypto.randomUUID()}.${type.ext}`, file.buffer);
+    return { ...stored, size: file.size, originalName: file.originalname, mimeType: type.mime };
+};
+
 /** Maps a public URL produced by publicUrl() back to its storage key, or null. */
 export const keyFromPublicUrl = (url) =>
     typeof url === 'string' && url.startsWith(`${UPLOADS_PUBLIC_PATH}/`) ? url.slice(UPLOADS_PUBLIC_PATH.length + 1) : null;
@@ -144,3 +174,32 @@ const parseSingle = (parser, field, sizeLimit) => (req, res, next) => {
 export const singlePdf = (field = 'file') => parseSingle(pdfUpload, field, MAX_UPLOAD_BYTES);
 // Accepts one image in the `file` field.
 export const singleImage = (field = 'file') => parseSingle(imageUpload, field, MAX_IMAGE_BYTES);
+
+// Accepts one PDF or image (registration document that may be a photo), up to 5 MB.
+const documentUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 5, parts: 6 },
+    fileFilter: (req, file, cb) => {
+        const ok = file.mimetype === PDF_MIME || IMAGE_TYPES.some((type) => type.mime === file.mimetype);
+        cb(ok ? null : new HttpError(415, 'الملف يجب أن يكون PDF أو صورة (PNG أو JPG)', 'INVALID_FILE_TYPE'), ok);
+    },
+});
+export const singleDocument = (field = 'file') => parseSingle(documentUpload, field, MAX_UPLOAD_BYTES);
+
+// Accepts one exception file: the size cap comes from the admin's settings (read per request,
+// so a change applies at once); the type and content are checked by saveExceptionFile.
+export const singleException = (field = 'file') => async (req, res, next) => {
+    let settings;
+    try {
+        settings = await getUploadExceptions();
+    } catch (error) {
+        return next(error);
+    }
+    if (!settings.enabled) {
+        return res.status(403).json({ success: false, message: 'رفع الملفات الاستثنائية غير متاح حاليًا', code: 'EXCEPTIONS_DISABLED', data: null });
+    }
+    req.uploadSettings = settings;
+    const maxBytes = Math.min(settings.maxMb, EXCEPTION_HARD_MAX_MB) * 1024 * 1024;
+    const parser = multer({ storage: multer.memoryStorage(), limits: { fileSize: maxBytes, files: 1, fields: 5, parts: 6 } });
+    return parseSingle(parser, field, maxBytes)(req, res, next);
+};

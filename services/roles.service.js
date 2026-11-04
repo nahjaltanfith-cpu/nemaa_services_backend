@@ -158,7 +158,7 @@ export const createRole = async (actor, data) => {
     return getRole(id);
 };
 
-/** Built-in roles keep their name; their permissions and scope can change. */
+/** Any role's name, permissions and scope can change (full-permission roles have no matrix). */
 export const updateRole = async (actor, id, data) => {
     await inTransaction(async (client) => {
         // Same lock as staff changes: a role edit and a staff change can't race each other.
@@ -167,18 +167,15 @@ export const updateRole = async (actor, id, data) => {
         assertMayEdit(actor, current);
         if (current.isSuperAdmin) throw new HttpError(409, 'دور الصلاحيات الكاملة لا يحتاج تحديد صلاحيات', 'SUPER_ADMIN_ROLE');
         assertMayGrant(actor, data.permissions, current.permissions.map((permission) => permission.key));
-        if (!current.isSystem) {
-            await assertLabelFree(client, data.label, id);
-            await client.query('UPDATE roles SET label = $2, description = $3 WHERE id = $1', [id, data.label, data.description]);
-        } else if (data.label !== current.label) {
-            throw new HttpError(409, 'لا يمكن تغيير اسم دور أساسي في النظام', 'SYSTEM_ROLE');
-        } else {
-            await client.query('UPDATE roles SET description = $2 WHERE id = $1', [id, data.description]);
-        }
+        // Only the label changes: code that relies on a built-in role uses its fixed `name`
+        await assertLabelFree(client, data.label, id);
+        await client.query('UPDATE roles SET label = $2, description = $3 WHERE id = $1', [id, data.label, data.description]);
         await writeMatrix(client, id, data);
         await logActivity(client, {
             actorId: actor.id, action: 'role.update', entityType: 'role', entityId: id,
-            summary: `تعديل صلاحيات «${data.label}»`,
+            summary: data.label !== current.label
+                ? `تعديل المسمى «${current.label}» إلى «${data.label}» وصلاحياته`
+                : `تعديل صلاحيات «${data.label}»`,
             details: {
                 from: current.permissions.map((permission) => permission.key), to: data.permissions,
                 scopeType: data.scopeType, assignedOnly: data.assignedOnly,
@@ -188,19 +185,26 @@ export const updateRole = async (actor, id, data) => {
     return getRole(id);
 };
 
-/** Custom roles nobody holds (active or not) can be deleted; built-in roles never. */
+// Roles the platform can't work without: full-permission roles (so nobody locks the system out)
+// and 'user', the role public sign-ups get (controllers/auth.controller.js).
+const UNDELETABLE_NAMES = new Set(['user']);
+
+/** Any role nobody holds (active or not) can be deleted, except the ones above. */
 export const deleteRole = async (actor, id) => {
     await inTransaction(async (client) => {
         await client.query('SELECT pg_advisory_xact_lock(7019)');
         const current = await getRole(id, client);
         assertMayEdit(actor, current);
-        if (current.isSystem) throw new HttpError(409, 'لا يمكن حذف دور أساسي في النظام', 'SYSTEM_ROLE');
+        if (current.isSuperAdmin || UNDELETABLE_NAMES.has(current.name)) {
+            throw new HttpError(409, 'هذا الدور ضروري لعمل المنصة ولا يمكن حذفه', 'SYSTEM_ROLE');
+        }
         if (current.members) {
             throw new HttpError(409, 'انقل الموظفين إلى دور آخر قبل حذف هذا الدور', 'ROLE_IN_USE');
         }
         await client.query('DELETE FROM roles WHERE id = $1', [id]);
         await logActivity(client, {
-            actorId: actor.id, action: 'role.delete', entityType: 'role', entityId: id, summary: `حذف المسمى «${current.label}»`,
+            actorId: actor.id, action: 'role.delete', entityType: 'role', entityId: id,
+            summary: `حذف المسمى «${current.label}»${current.isSystem ? ' (مسمى أساسي)' : ''}`,
         });
     });
     return { id };

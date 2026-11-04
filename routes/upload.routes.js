@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { uploadFile, uploadImage } from '../controllers/upload.controller.js';
+import { exceptionSettings, uploadDocument, uploadException, uploadFile, uploadImage } from '../controllers/upload.controller.js';
 import { P } from '../config/permissions.js';
 import { authenticate, requireAnyPermission } from '../middlewares/auth.middleware.js';
-import { singleImage, singlePdf } from '../services/upload.service.js';
+import { singleDocument, singleException, singleImage, singlePdf } from '../services/upload.service.js';
 
 const router = Router();
 
@@ -65,6 +65,12 @@ const router = Router();
  *       '415': { description: Not a PNG, JPG or WebP (checked by file signature) }
  */
 router.post('/', singlePdf('file'), uploadFile);
+// The NGO license at sign-up / in the NGO portal: a PDF or a photo of it (public, like the PDF upload)
+router.post('/document', singleDocument('file'), uploadDocument);
+// Upload exceptions (bigger file / another allowed type) for request attachments and deliverables:
+// signed-in NGOs and staff only, within the limits set in the dashboard's files page.
+router.get('/exceptions', authenticate, exceptionSettings);
+router.post('/exception', authenticate, singleException('file'), uploadException);
 // Catalog images, and staff profile pictures (manage:employees)
 router.post('/image', authenticate, requireAnyPermission(P.MANAGE_CATALOG, P.MANAGE_EMPLOYEES), singleImage('file'), uploadImage);
 

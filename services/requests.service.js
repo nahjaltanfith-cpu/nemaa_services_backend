@@ -7,7 +7,7 @@ import { logActivity } from './activityLog.service.js';
 import { notifyNewRequest, notifyRequestStatus } from './notifications.service.js';
 import { EVENTS, emitToRequest } from './realtime.service.js';
 import { ROLE_COVERS_REQUEST, scopeSql } from './requestScope.js';
-import { fileExists, publicUrl } from './upload.service.js';
+import { TEMP_FILE_KEY_PATTERN, fileExists, publicUrl } from './upload.service.js';
 
 // Default "سجل الحالة" wording per status; admins can write their own label instead.
 export const STATUS_LABELS = {
@@ -255,7 +255,7 @@ const assertCanRequest = async (ngoId) => {
 // Files must have been uploaded through POST /api/upload and still be stored.
 const assertFilesExist = async (files) => {
     for (const file of files) {
-        if (!(await fileExists(file.key))) {
+        if (!(await fileExists(file.key, TEMP_FILE_KEY_PATTERN))) {
             throw new HttpError(400, `الملف «${file.name}» غير موجود، ارفعه مرة أخرى`, 'FILE_NOT_FOUND');
         }
     }

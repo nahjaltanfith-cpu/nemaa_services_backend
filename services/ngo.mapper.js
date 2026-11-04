@@ -1,9 +1,10 @@
-import { publicUrl } from './upload.service.js';
+import { TEMP_DOCUMENT_KEY_PATTERN, TEMP_PDF_KEY_PATTERN, publicUrl } from './upload.service.js';
 
 // Registration documents: API key ↔ column. Labels match the frontend cards.
+// allowsImage: the license may be a PDF or a photo; the representative proof stays a PDF.
 export const DOCUMENTS = [
-    { key: 'ngoDocument', column: 'ngo_document_key', label: 'وثيقة تعريف الجمعية' },
-    { key: 'representativeProof', column: 'representative_proof_key', label: 'إثبات صفة الممثل' },
+    { key: 'ngoDocument', column: 'ngo_document_key', label: 'ترخيص الجمعية', allowsImage: true, pattern: TEMP_DOCUMENT_KEY_PATTERN },
+    { key: 'representativeProof', column: 'representative_proof_key', label: 'إثبات صفة الممثل', allowsImage: false, pattern: TEMP_PDF_KEY_PATTERN },
 ];
 
 export const ACCOUNT_STATUSES = ['new', 'under_review', 'needs_documents', 'approved'];
@@ -44,9 +45,10 @@ export const toPublicNgo = (row, viewer = 'ngo') => ({
     conversationOpen: row.conversation_open,
     unreadMessages: viewer === 'admin' ? row.unread_from_ngo : row.unread_from_admin,
     createdAt: row.created_at,
-    documents: DOCUMENTS.map(({ key, column, label }) => ({
+    documents: DOCUMENTS.map(({ key, column, label, allowsImage }) => ({
         key,
         label,
+        allowsImage,
         status: row[column] ? 'uploaded' : 'missing',
         fileUrl: row[column] ? publicUrl(row[column]) : null,
     })),
