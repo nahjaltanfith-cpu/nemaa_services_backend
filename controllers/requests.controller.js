@@ -1,6 +1,8 @@
 import { hasPermission } from '../middlewares/auth.middleware.js';
 import { logActivity } from '../services/activityLog.service.js';
 import * as requests from '../services/requests.service.js';
+import { getAdminOverview } from '../services/stats.service.js';
+import { P } from '../config/permissions.js';
 import { viewerOf } from '../services/requestScope.js';
 import { handle } from '../utils/handle.js';
 import { HttpError } from '../utils/httpError.js';
@@ -59,6 +61,9 @@ const actorOf = (req) => ({ ...viewerOf(req.user), can: (key) => hasPermission(r
 
 export const adminList = handle('requests admin-list', 200, 'تم جلب الطلبات',
     (req) => requests.listRequestsForAdmin(filters(req.query), viewerOf(req.user)));
+
+export const adminOverview = handle('requests admin-overview', 200, 'تم جلب المؤشرات',
+    (req) => getAdminOverview(viewerOf(req.user), { includeNgos: hasPermission(req.user, P.READ_ORG_DOCS) }));
 
 export const adminGet = handle('requests admin-get', 200, 'تم جلب الطلب',
     (req) => requests.getRequestForAdmin(req.params.id, viewerOf(req.user)));

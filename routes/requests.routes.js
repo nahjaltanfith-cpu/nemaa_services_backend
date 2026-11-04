@@ -187,6 +187,7 @@ const STATUS_ACTIONS = [P.DOCUMENT_UPDATES, P.REQUEST_ORDER_INFO, P.APPROVE_SERV
 export const adminRequestsRouter = Router()
     .use(authenticate, requirePermission(P.READ_ORDERS))
     .get('/', controller.adminList)
+    .get('/overview', controller.adminOverview)
     .get('/:id', parseIdParam(), controller.adminGet)
     .delete('/:id', parseIdParam(), requireSuperAdmin, controller.adminArchive)
     .patch('/:id/status', parseIdParam(), requireAnyPermission(...STATUS_ACTIONS), validateBody(statusSchema), controller.adminStatus)
