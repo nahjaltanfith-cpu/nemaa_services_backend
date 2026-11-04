@@ -7,7 +7,7 @@
       "status": "active",
       "imageUrl": null,
       "price": null,
-      "isFree": false,
+      "isFree": true,
       "rating": 5,
       "responseTime": "خلال يومي عمل",
       "duration": "يحدد بعد الاجتماع",
