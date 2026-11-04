@@ -47,6 +47,10 @@ const attachmentList = Joi.array().items(attachment).max(MAX_LIST_ITEMS).default
 // for allowed values, so '' reached the database.
 export const optionalText = (max) => Joi.string().trim().max(max).empty('').allow(null).default(null);
 
+// How many NGOs may hold a place at once (service or center form); blank = open.
+export const maxBeneficiaries = Joi.number().integer().min(1).max(100000).empty('').allow(null).default(null)
+    .messages({ 'number.base': 'أقصى عدد مستفيدين يجب أن يكون رقمًا', 'number.integer': 'أقصى عدد مستفيدين يجب أن يكون رقمًا صحيحًا', 'number.min': 'أقصى عدد مستفيدين لا يقل عن 1', 'number.max': 'أقصى عدد مستفيدين لا يزيد عن 100000' });
+
 // Create and update share the schema: the admin form always sends the full service.
 export const serviceSchema = Joi.object({
     title: Joi.string().trim().min(2).max(255).required()
@@ -64,6 +68,7 @@ export const serviceSchema = Joi.object({
     // Free for now (e.g. launch): the price is kept, the website shows the service as free.
     isFree: Joi.boolean().default(false)
         .messages({ 'boolean.base': 'خيار "مجانية حاليًا" غير صالح' }),
+    maxBeneficiaries,
     duration: optionalText(100),
     categoryId: Joi.number().integer().positive().allow(null).default(null)
         .messages({ 'number.base': 'التصنيف غير صالح' }),

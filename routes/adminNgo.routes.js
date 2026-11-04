@@ -4,7 +4,7 @@ import { P } from '../config/permissions.js';
 import { authenticate, requirePermission } from '../middlewares/auth.middleware.js';
 import { parseIdParam } from '../middlewares/params.middleware.js';
 import { validateBody } from '../middlewares/validate.middleware.js';
-import { conversationSchema, messageSchema, statusUpdateSchema } from '../validators/review.validator.js';
+import { conversationSchema, limitsExemptSchema, messageSchema, statusUpdateSchema } from '../validators/review.validator.js';
 
 const router = Router();
 // Reading NGO files and conversations: read:org_docs. Changing the account status and talking to
@@ -126,6 +126,7 @@ const approver = requirePermission(P.APPROVE_ORG_ACCOUNTS);
 router.get('/', controller.listNgos);
 router.get('/:id', parseIdParam(), controller.getNgo);
 router.patch('/:id/status', parseIdParam(), approver, validateBody(statusUpdateSchema), controller.updateStatus);
+router.patch('/:id/limits-exempt', parseIdParam(), approver, validateBody(limitsExemptSchema), controller.setLimitsExempt);
 router.get('/:id/messages', parseIdParam(), controller.listMessages);
 router.post('/:id/messages', parseIdParam(), approver, validateBody(messageSchema), controller.sendMessage);
 router.post('/:id/messages/read', parseIdParam(), controller.markRead);

@@ -1,6 +1,7 @@
 import pool from '../db.js';
 import { HttpError } from '../utils/httpError.js';
 import { buildShortDescription } from '../utils/summary.js';
+import { activeBeneficiariesSql, capacityFields } from './requestLimits.service.js';
 import { IMAGE_KEY_PATTERN, fileExists, keyFromPublicUrl } from './upload.service.js';
 
 // Statuses NGOs and visitors can see; 'inactive' services exist only for admins.
@@ -10,6 +11,7 @@ const SITE_ASSET_PATTERN = /^\/images\/[\w/-]+\.(png|jpe?g|webp|svg)$/i;
 
 const SELECT = `
     SELECT s.*, c.name AS category_name,
+        ${activeBeneficiariesSql('service_id', 's.id')} AS active_beneficiaries,
         COALESCE((
             SELECT json_agg(json_build_object('id', ce.id, 'title', ce.title) ORDER BY ce.title)
             FROM center_services sc JOIN enablement_centers ce ON ce.id = sc.center_id
@@ -27,6 +29,7 @@ const toService = (row) => ({
     price: row.price === null ? null : Number(row.price), // null = يحدد بعد الاجتماع
     isFree: row.is_free, // مجانية حاليًا: السعر محفوظ بس الخدمة بتتعرض مجانًا
     requestCount: row.request_count,
+    ...capacityFields(row),
     rating: Number(row.rating),
     responseTime: row.response_time,
     duration: row.duration,
@@ -100,7 +103,7 @@ const columnValues = (data) => [
     data.fullDescription, data.shortDescription || buildShortDescription(data.fullDescription),
     JSON.stringify(data.outputs), JSON.stringify(data.workMethodology),
     JSON.stringify(data.targetAudience), JSON.stringify(data.includes), JSON.stringify(data.requiredAttachments),
-    data.isFree,
+    data.isFree, data.maxBeneficiaries ?? null,
 ];
 
 const query = async (sql, params) => {
@@ -116,8 +119,8 @@ export const createService = async (data) => {
     const { rows } = await query(
         `INSERT INTO services (title, status, image_url, price, code, duration, category_id,
              full_description, short_description, outputs, work_methodology, target_audience, includes,
-             required_attachments, is_free)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+             required_attachments, is_free, max_beneficiaries)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING id`,
         columnValues(data)
     );
@@ -130,7 +133,7 @@ export const updateService = async (id, data) => {
         `UPDATE services SET title = $2, status = $3, image_url = $4, price = $5, code = $6,
              duration = $7, category_id = $8, full_description = $9, short_description = $10,
              outputs = $11, work_methodology = $12, target_audience = $13, includes = $14,
-             required_attachments = $15, is_free = $16,
+             required_attachments = $15, is_free = $16, max_beneficiaries = $17,
              updated_at = NOW()
          WHERE id = $1`,
         [id, ...columnValues(data)]

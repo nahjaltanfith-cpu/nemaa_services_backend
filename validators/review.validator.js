@@ -28,6 +28,10 @@ export const messageSchema = Joi.object({
         }),
 });
 
+export const limitsExemptSchema = Joi.object({
+    exempt: Joi.boolean().required().messages({ 'any.required': 'حالة الاستثناء مطلوبة' }),
+});
+
 export const conversationSchema = Joi.object({
     open: Joi.boolean().required().messages({ 'any.required': 'حالة المحادثة مطلوبة' }),
 });

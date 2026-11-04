@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { MAX_LIST_ITEMS, methodology, optionalText, textList, titledList } from './service.validator.js';
+import { MAX_LIST_ITEMS, maxBeneficiaries, methodology, optionalText, textList, titledList } from './service.validator.js';
 
 export const CENTER_STATUSES = ['active', 'inactive', 'coming_soon'];
 
@@ -16,6 +16,7 @@ export const centerSchema = Joi.object({
         .messages({ 'number.base': 'السعر يجب أن يكون رقمًا', 'number.min': 'السعر لا يمكن أن يكون سالبًا' }),
     // Free for now (e.g. launch): the price is kept, the website shows the center as free.
     isFree: Joi.boolean().default(false),
+    maxBeneficiaries,
     responseTime: optionalText(100),
     executionDuration: optionalText(100),
     overview: Joi.string().trim().min(10).max(20000).required()

@@ -6,6 +6,7 @@ import { P } from '../config/permissions.js';
 import { logActivity } from './activityLog.service.js';
 import { notifyNewRequest, notifyRequestStatus } from './notifications.service.js';
 import { EVENTS, emitToRequest } from './realtime.service.js';
+import { assertWithinLimits } from './requestLimits.service.js';
 import { ROLE_COVERS_REQUEST, scopeSql } from './requestScope.js';
 import { TEMP_FILE_KEY_PATTERN, fileExists, publicUrl } from './upload.service.js';
 
@@ -264,23 +265,23 @@ const assertFilesExist = async (files) => {
 // What the request is for: an active service or center (title snapshot + its required documents).
 const resolveTarget = async (client, type, targetId) => {
     if (!type || targetId == null || targetId === '') {
-        return { type: null, serviceId: null, centerId: null, name: '', documents: [] };
+        return { type: null, serviceId: null, centerId: null, name: '', isFree: false, documents: [] };
     }
     if (type === 'service') {
         const id = Number(targetId);
         const { rows } = Number.isSafeInteger(id)
-            ? await client.query('SELECT id, title, status, required_attachments FROM services WHERE id = $1', [id])
+            ? await client.query('SELECT id, title, status, is_free, required_attachments FROM services WHERE id = $1', [id])
             : { rows: [] };
         if (!rows.length || rows[0].status !== 'active') {
             throw new HttpError(400, 'الخدمة المختارة غير متاحة للطلب حاليًا', 'TARGET_NOT_AVAILABLE');
         }
-        return { type, serviceId: rows[0].id, centerId: null, name: rows[0].title, documents: rows[0].required_attachments };
+        return { type, serviceId: rows[0].id, centerId: null, name: rows[0].title, isFree: rows[0].is_free, documents: rows[0].required_attachments };
     }
-    const { rows } = await client.query('SELECT id, title, status FROM enablement_centers WHERE id = $1', [String(targetId)]);
+    const { rows } = await client.query('SELECT id, title, status, is_free FROM enablement_centers WHERE id = $1', [String(targetId)]);
     if (!rows.length || rows[0].status !== 'active') {
         throw new HttpError(400, 'المركز المختار غير متاح للطلب حاليًا', 'TARGET_NOT_AVAILABLE');
     }
-    return { type, serviceId: null, centerId: rows[0].id, name: rows[0].title, documents: [] };
+    return { type, serviceId: null, centerId: rows[0].id, name: rows[0].title, isFree: rows[0].is_free, documents: [] };
 };
 
 const assertSubmittable = (data, target) => {
@@ -324,15 +325,18 @@ export const createRequest = async (ngoId, data) => {
     await assertFilesExist(data.attachments);
     const id = await inTransaction(async (client) => {
         const target = await resolveTarget(client, data.type, data.targetId);
-        if (data.submit) assertSubmittable(data, target);
+        if (data.submit) {
+            assertSubmittable(data, target);
+            await assertWithinLimits(client, ngoId, target);
+        }
         const status = data.submit ? 'under_study' : 'draft';
         const { rows } = await client.query(
             `INSERT INTO service_requests (ref_code, ngo_id, target_type, service_id, center_id, target_name,
-                 need_title, summary, description, contact_method, status, submitted_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ${data.submit ? 'NOW()' : 'NULL'})
+                 need_title, summary, description, contact_method, status, target_is_free, submitted_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ${data.submit ? 'NOW()' : 'NULL'})
              RETURNING id`,
             [`${data.submit ? 'REQ' : 'D'}-${refSuffix()}`, ngoId, target.type, target.serviceId, target.centerId,
-                target.name, data.needTitle, data.summary, data.description, data.contactMethod, status]
+                target.name, data.needTitle, data.summary, data.description, data.contactMethod, status, target.isFree]
         );
         const requestId = rows[0].id;
         await insertFiles(client, requestId, 'ngo', data.attachments, { documents: target.documents });
@@ -361,17 +365,20 @@ export const updateDraft = async (ngoId, id, data) => {
             throw new HttpError(409, 'لا يمكن تعديل الطلب بعد إرساله', 'REQUEST_ALREADY_SUBMITTED');
         }
         const target = await resolveTarget(client, data.type, data.targetId);
-        if (data.submit) assertSubmittable(data, target);
+        if (data.submit) {
+            assertSubmittable(data, target);
+            await assertWithinLimits(client, ngoId, target);
+        }
         await client.query(
             `UPDATE service_requests SET target_type = $2, service_id = $3, center_id = $4, target_name = $5,
                  need_title = $6, summary = $7, description = $8, contact_method = $9,
-                 status = $10,
+                 status = $10, target_is_free = $12,
                  ref_code = CASE WHEN $11::boolean THEN regexp_replace(ref_code, '^(DRAFT|D)-', 'REQ-') ELSE ref_code END,
                  submitted_at = CASE WHEN $11::boolean THEN NOW() ELSE submitted_at END,
                  updated_at = NOW()
              WHERE id = $1`,
             [id, target.type, target.serviceId, target.centerId, target.name, data.needTitle, data.summary,
-                data.description, data.contactMethod, data.submit ? 'under_study' : 'draft', data.submit]
+                data.description, data.contactMethod, data.submit ? 'under_study' : 'draft', data.submit, target.isFree]
         );
         await client.query("DELETE FROM request_files WHERE request_id = $1 AND kind = 'ngo'", [id]);
         await insertFiles(client, id, 'ngo', data.attachments, { documents: target.documents });

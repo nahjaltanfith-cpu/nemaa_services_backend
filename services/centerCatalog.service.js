@@ -1,6 +1,7 @@
 import pool from '../db.js';
 import { HttpError } from '../utils/httpError.js';
 import { buildShortDescription } from '../utils/summary.js';
+import { activeBeneficiariesSql, capacityFields } from './requestLimits.service.js';
 import { assertValidImage } from './serviceCatalog.service.js';
 
 // Statuses NGOs and visitors can see; 'inactive' centers (and services) exist only for admins.
@@ -9,6 +10,7 @@ const PUBLIC_STATUSES = ['active', 'coming_soon'];
 // Visitors only see the center's services they could open themselves.
 const select = (includeHidden) => `
     SELECT ce.*,
+        ${activeBeneficiariesSql('center_id', 'ce.id')} AS active_beneficiaries,
         COALESCE((
             SELECT json_agg(json_build_object(
                 'id', s.id, 'title', s.title, 'status', s.status, 'imageUrl', s.image_url,
@@ -27,6 +29,7 @@ const toCenter = (row) => ({
     price: row.price === null ? null : Number(row.price),
     isFree: row.is_free,
     requestCount: row.request_count,
+    ...capacityFields(row),
     rating: Number(row.rating),
     responseTime: row.response_time,
     executionDuration: row.execution_duration,
@@ -83,7 +86,7 @@ const columnValues = (data) => [
     data.title, data.status, data.imageUrl, data.price, data.responseTime, data.executionDuration,
     data.overview, data.shortDescription || buildShortDescription(data.overview),
     JSON.stringify(data.outputs), JSON.stringify(data.methodology), JSON.stringify(data.targetAudience),
-    JSON.stringify(data.extraServices ?? []), Boolean(data.isFree),
+    JSON.stringify(data.extraServices ?? []), Boolean(data.isFree), data.maxBeneficiaries ?? null,
 ];
 
 // Inside a transaction: replaces the center's services with exactly `serviceIds`.
@@ -119,8 +122,8 @@ export const createCenter = async (data) => {
         const { rows } = await client.query(
             `INSERT INTO enablement_centers (title, status, image_url, price, response_time,
                  execution_duration, overview, short_description, outputs, methodology, target_audience,
-                 extra_services, is_free)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 extra_services, is_free, max_beneficiaries)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING id`,
             columnValues(data)
         );
@@ -136,7 +139,7 @@ export const updateCenter = async (id, data) => {
         const { rowCount } = await client.query(
             `UPDATE enablement_centers SET title = $2, status = $3, image_url = $4, price = $5,
                  response_time = $6, execution_duration = $7, overview = $8, short_description = $9,
-                 outputs = $10, methodology = $11, target_audience = $12, extra_services = $13, is_free = $14, updated_at = NOW()
+                 outputs = $10, methodology = $11, target_audience = $12, extra_services = $13, is_free = $14, max_beneficiaries = $15, updated_at = NOW()
              WHERE id = $1`,
             [id, ...columnValues(data)]
         );

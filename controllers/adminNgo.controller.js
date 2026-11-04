@@ -74,6 +74,15 @@ export const setConversation = handle('admin-ngo conversation', 200, 'تم تح�
     return result;
 });
 
+export const setLimitsExempt = handle('admin-ngo limits exempt', 200, 'تم تحديث استثناء حدود الطلبات', async (req) => {
+    const ngo = await adminNgo.setLimitsExempt(req.params.id, req.body.exempt);
+    await logActivity(null, {
+        actorId: req.user.id, action: 'ngo.limits_exempt', entityType: 'ngo', entityId: ngo.id,
+        summary: `${ngo.limitsExempt ? 'استثناء' : 'إلغاء استثناء'} جمعية «${ngo.ngoName}» من حدود الطلبات`,
+    });
+    return ngo;
+});
+
 export const deleteDocument = handle('admin-ngo delete document', 200, 'تم حذف المستند', async (req) => {
     const { ngo, label } = await adminNgo.deleteNgoDocument(req.params.id, req.params.key);
     await logActivity(null, {

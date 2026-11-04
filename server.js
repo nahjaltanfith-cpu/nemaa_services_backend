@@ -27,6 +27,7 @@ import statsRoutes from './routes/stats.routes.js';
 import { adminRequestsRouter, ngoRequestsRouter } from './routes/requests.routes.js';
 import roleRoutes, { activityRouter } from './routes/roles.routes.js';
 import staffRoutes from './routes/staff.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import { startMediaJobs } from './services/media.service.js';
 import contactRoutes from './routes/contact.routes.js';
@@ -94,6 +95,7 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/activity-log', activityRouter);
 app.use('/api/contact', contactRoutes);
 app.use('/api/v1/admin/files', mediaRoutes);
+app.use('/api/v1/admin/settings', settingsRoutes);
 
 // ── Uploaded files (local storage only; drop this once files are served from cloud storage)
 app.use(UPLOADS_PUBLIC_PATH, express.static(UPLOADS_ROOT, {

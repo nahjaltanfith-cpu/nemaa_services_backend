@@ -76,6 +76,17 @@ export const updateNgoStatus = async (id, { status, notes }) => {
     return ngo;
 };
 
+/** Exempts the NGO from every request limit, or puts it back under them. */
+export const setLimitsExempt = async (id, exempt) => {
+    const { rows } = await pool.query(
+        `UPDATE ngos SET limits_exempt = $2, updated_at = NOW() WHERE id = $1 AND ${VERIFIED} RETURNING ${NGO_COLUMNS}`,
+        [id, exempt]
+    );
+    if (!rows.length) throw notFound();
+    emitToThread(id, EVENTS.NGO_UPDATED, { ngoId: id });
+    return toPublicNgo(rows[0], 'admin');
+};
+
 /**
  * Removes one registration document (e.g. a wrong file): the NGO sees it as missing again and can
  * upload a new one. The review status is left as is; the reviewer sets "needs documents" if needed.

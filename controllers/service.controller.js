@@ -18,7 +18,7 @@ export const get = handle('services get', 200, 'تم جلب الخدمة',
 // The saved service in the form's shape (what applyAllowedFields falls back to).
 const savedInput = (service) => ({
     code: service.code, title: service.title, status: service.status, imageUrl: service.imageUrl, price: service.price,
-    isFree: service.isFree, duration: service.duration, categoryId: service.categoryId,
+    isFree: service.isFree, maxBeneficiaries: service.maxBeneficiaries, duration: service.duration, categoryId: service.categoryId,
     fullDescription: service.fullDescription, shortDescription: service.shortDescription,
     outputs: service.outputs, workMethodology: service.workMethodology, targetAudience: service.targetAudience,
     includes: service.includes, requiredAttachments: service.requiredAttachments,
@@ -29,7 +29,7 @@ const FIELD_LABELS = {
     code: 'كود الخدمة', title: 'العنوان', status: 'الحالة', imageUrl: 'الصورة', price: 'السعر', isFree: 'مجانية حاليًا',
     duration: 'مدة التنفيذ', categoryId: 'التصنيف', fullDescription: 'الوصف الكامل', shortDescription: 'الوصف المختصر',
     outputs: 'المخرجات', workMethodology: 'منهجية العمل', targetAudience: 'الفئة المستهدفة', includes: 'ما تشمله الخدمة (النطاق)',
-    requiredAttachments: 'المرفقات المطلوبة',
+    requiredAttachments: 'المرفقات المطلوبة', maxBeneficiaries: 'أقصى عدد مستفيدين',
 };
 
 // Creating needs manage:catalog (route); the price and form requirements still need their own rights.
