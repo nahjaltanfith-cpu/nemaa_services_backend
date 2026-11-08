@@ -205,16 +205,16 @@ const listRequests = async ({
     }
     const whereSql = `WHERE ${where.join(' AND ')}`;
     const map = ngoId ? toSummary : toAdminSummary;
+    // Team list: "new" requests (untouched by the team) first, then the latest activity.
+    const orderSql = `ORDER BY ${ngoId ? '' : 'is_new DESC, '}r.updated_at DESC, r.id DESC`;
     if (!page) {
-        const { rows } = await pool.query(
-            `${summarySelect(unreadFrom)} ${whereSql} ORDER BY r.updated_at DESC, r.id DESC`, params
-        );
+        const { rows } = await pool.query(`${summarySelect(unreadFrom)} ${whereSql} ${orderSql}`, params);
         return rows.map(map);
     }
     const pageParams = [...params];
     const limit = pageSql(pageParams, { page, pageSize });
     const [{ rows }, { rows: totalRows }, { rows: statusRows }, { rows: assignRows }, ngoRows] = await Promise.all([
-        pool.query(`${summarySelect(unreadFrom)} ${whereSql} ORDER BY r.updated_at DESC, r.id DESC ${limit}`, pageParams),
+        pool.query(`${summarySelect(unreadFrom)} ${whereSql} ${orderSql} ${limit}`, pageParams),
         pool.query(`SELECT COUNT(*) AS count FROM service_requests r JOIN ngos n ON n.id = r.ngo_id ${whereSql}`, params),
         pool.query(`SELECT r.status AS key, COUNT(*) AS count FROM service_requests r WHERE ${baseSql} GROUP BY r.status`, baseParams),
         pool.query(
