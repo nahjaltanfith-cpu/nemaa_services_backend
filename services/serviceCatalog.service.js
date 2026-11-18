@@ -1,7 +1,7 @@
 import pool from '../db.js';
 import { HttpError } from '../utils/httpError.js';
 import { buildShortDescription } from '../utils/summary.js';
-import { activeBeneficiariesSql, capacityFields } from './requestLimits.service.js';
+import { activeBeneficiariesSql, capacityFields, queuedRequestsSql } from './requestLimits.service.js';
 import { IMAGE_KEY_PATTERN, fileExists, keyFromPublicUrl } from './upload.service.js';
 
 // Statuses NGOs and visitors can see; 'inactive' services exist only for admins.
@@ -12,6 +12,7 @@ const SITE_ASSET_PATTERN = /^\/images\/[\w/-]+\.(png|jpe?g|webp|svg)$/i;
 const SELECT = `
     SELECT s.*, c.name AS category_name,
         ${activeBeneficiariesSql('service_id', 's.id')} AS active_beneficiaries,
+        ${queuedRequestsSql('service_id', 's.id')} AS queued_requests,
         COALESCE((
             SELECT json_agg(json_build_object('id', ce.id, 'title', ce.title) ORDER BY ce.title)
             FROM center_services sc JOIN enablement_centers ce ON ce.id = sc.center_id

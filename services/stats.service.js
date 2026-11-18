@@ -31,6 +31,7 @@ export const getAdminOverview = async (viewer, { includeNgos = false } = {}) => 
     const [summary, monthly, topTargets, ngos] = await Promise.all([
         pool.query(
             `SELECT COUNT(*)::int AS total,
+                    COUNT(*) FILTER (WHERE r.status = 'queued')::int AS queued,
                     COUNT(*) FILTER (WHERE r.status = 'under_study')::int AS under_study,
                     COUNT(*) FILTER (WHERE r.status = 'needs_completion')::int AS needs_completion,
                     COUNT(*) FILTER (WHERE r.status = 'in_progress')::int AS in_progress,
@@ -58,13 +59,15 @@ export const getAdminOverview = async (viewer, { includeNgos = false } = {}) => 
             : null,
     ]);
 
-    const { total, under_study: underStudy, needs_completion: needsCompletion, in_progress: inProgress,
+    const { total, queued, under_study: underStudy, needs_completion: needsCompletion, in_progress: inProgress,
         completed, unassigned, last_30_days: last30Days } = summary.rows[0];
     return {
         requests: {
             total,
             // Accepted = approved for work, whether it is still running or already delivered.
             accepted: inProgress + completed,
+            // On a full service's or center's waiting list.
+            queued,
             underStudy,
             needsCompletion,
             inProgress,

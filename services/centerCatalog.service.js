@@ -1,7 +1,7 @@
 import pool from '../db.js';
 import { HttpError } from '../utils/httpError.js';
 import { buildShortDescription } from '../utils/summary.js';
-import { activeBeneficiariesSql, capacityFields } from './requestLimits.service.js';
+import { activeBeneficiariesSql, capacityFields, queuedRequestsSql } from './requestLimits.service.js';
 import { assertValidImage } from './serviceCatalog.service.js';
 
 // Statuses NGOs and visitors can see; 'inactive' centers (and services) exist only for admins.
@@ -11,6 +11,7 @@ const PUBLIC_STATUSES = ['active', 'coming_soon'];
 const select = (includeHidden) => `
     SELECT ce.*,
         ${activeBeneficiariesSql('center_id', 'ce.id')} AS active_beneficiaries,
+        ${queuedRequestsSql('center_id', 'ce.id')} AS queued_requests,
         COALESCE((
             SELECT json_agg(json_build_object(
                 'id', s.id, 'title', s.title, 'status', s.status, 'imageUrl', s.image_url,

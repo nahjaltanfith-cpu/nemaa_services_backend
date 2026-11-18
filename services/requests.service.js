@@ -6,13 +6,14 @@ import { P } from '../config/permissions.js';
 import { logActivity } from './activityLog.service.js';
 import { notifyNewRequest, notifyRequestStatus } from './notifications.service.js';
 import { EVENTS, emitToRequest } from './realtime.service.js';
-import { assertWithinLimits } from './requestLimits.service.js';
+import { OPEN_STATUSES, TARGETS, checkLimits, hasPlaceFor } from './requestLimits.service.js';
 import { ROLE_COVERS_REQUEST, scopeSql } from './requestScope.js';
 import { TEMP_FILE_KEY_PATTERN, fileExists, publicUrl } from './upload.service.js';
 
 // Default "سجل الحالة" wording per status; admins can write their own label instead.
 export const STATUS_LABELS = {
     draft: 'تم حفظ المسودة',
+    queued: 'في قائمة الانتظار',
     under_study: 'قيد الدراسة والمراجعة',
     needs_completion: 'مطلوب استكمال مستندات',
     in_progress: 'جاري العمل على الطلب',
@@ -21,6 +22,9 @@ export const STATUS_LABELS = {
 const SUBMITTED_LABEL = 'تم تقديم الطلب';
 const COMPLETION_SENT_LABEL = 'تم إرسال المستندات المطلوبة';
 const DELIVERABLES_LABEL = 'تم رفع ملفات التسليم';
+const QUEUED_NOTE = 'اكتمل العدد الحالي للمستفيدين، فدخل طلبكم قائمة الانتظار. سيُنقل إلى الدراسة تلقائيًا فور توفر مكان، وقد يتأخر قليلًا.';
+const ADMITTED_LABEL = 'خرج الطلب من قائمة الانتظار';
+const ADMITTED_NOTE = 'توفر مكان، وانتقل طلبكم إلى الدراسة والمراجعة';
 const THREAD_LIMIT = 500;
 
 const notFound = () => new HttpError(404, 'الطلب غير موجود', 'NOT_FOUND');
@@ -54,8 +58,15 @@ const summarySelect = (unreadFrom) => `
          WHERE i.request_id = r.id AND i.fulfilled_at IS NULL) AS pending_items,
         -- A team action the NGO has not opened yet.
         EXISTS (SELECT 1 FROM request_status_log l
-                WHERE l.request_id = r.id AND l.actor_type = 'admin'
+                WHERE l.request_id = r.id AND l.actor_type IN ('admin', 'system')
                   AND l.created_at > COALESCE(r.ngo_seen_at, 'epoch'::timestamp)) AS has_team_update,
+        -- Waiting list: 1 = next to be admitted on its service or center.
+        CASE WHEN r.status = 'queued' THEN (
+            SELECT COUNT(*) + 1 FROM service_requests q
+            WHERE q.status = 'queued' AND q.deleted_at IS NULL
+              AND (q.service_id = r.service_id OR q.center_id = r.center_id)
+              AND (q.submitted_at, q.id) < (r.submitted_at, r.id)
+        ) END AS queue_position,
         -- Submitted and the team has not recorded anything yet (dashboard shows it as "new").
         (r.status = 'under_study' AND NOT EXISTS (SELECT 1 FROM request_status_log l
                 WHERE l.request_id = r.id AND l.actor_type = 'admin')) AS is_new
@@ -79,6 +90,8 @@ const toSummary = (row) => ({
     pendingItems: row.pending_items,
     // NGO view: the team changed something since the NGO last opened the request.
     hasTeamUpdate: row.has_team_update,
+    // Waiting list only (status 'queued'): its place in line, 1 = next.
+    queuePosition: row.queue_position ?? null,
     // Team view: submitted and untouched by the team — shown as "new" until the first team update.
     isNew: row.is_new,
     submittedAt: row.submitted_at,
@@ -318,18 +331,78 @@ const logStatus = (client, requestId, { status, label, note = null, actor, userI
 const notifyUpdated = (ngoId, requestId, status) =>
     emitToRequest(ngoId, requestId, EVENTS.REQUEST_UPDATED, { requestId, ngoId, status });
 
+// After a submission commits. A queued request only shows up on the lists: the team is emailed
+// when it leaves the waiting list and actually needs someone (see admitFromQueue).
+const announceSubmitted = (ngoId, requestId, status) => {
+    if (status === 'draft') return;
+    notifyUpdated(ngoId, requestId, status);
+    if (status === 'under_study') notifyNewRequest(requestId);
+};
+
+// ── Waiting list (قائمة الانتظار) ───────────────────────────────────────────
+/**
+ * Moves the oldest queued requests of a service or center to "under study" while it has room
+ * (strict order: the first one that can't get in stops the line). releaseAll admits everyone,
+ * e.g. right before the target is deleted. Run it inside the transaction that freed the place;
+ * it locks the target like a submission does, so the two never hand out the same place.
+ * @returns {Promise<Array<{ id: number, ngoId: number }>>} the admitted requests, for announceAdmitted
+ */
+export const admitFromQueue = async (client, type, targetId, { releaseAll = false } = {}) => {
+    if (!TARGETS[type] || targetId == null) return [];
+    const { table, column } = TARGETS[type];
+    const { rows: [target] } = await client.query(
+        `SELECT max_beneficiaries FROM ${table} WHERE id = $1 FOR NO KEY UPDATE`, [targetId]
+    );
+    if (!target) return [];
+    const admitted = [];
+    for (;;) {
+        const { rows: [next] } = await client.query(
+            `SELECT id, ngo_id FROM service_requests
+             WHERE ${column} = $1 AND status = 'queued' AND deleted_at IS NULL
+             ORDER BY submitted_at, id LIMIT 1 FOR UPDATE`,
+            [targetId]
+        );
+        if (!next) break;
+        if (!releaseAll && !(await hasPlaceFor(client, column, targetId, next.ngo_id, target.max_beneficiaries))) break;
+        await client.query("UPDATE service_requests SET status = 'under_study', updated_at = NOW() WHERE id = $1", [next.id]);
+        await logStatus(client, next.id, { status: 'under_study', label: ADMITTED_LABEL, note: ADMITTED_NOTE, actor: 'system' });
+        admitted.push({ id: next.id, ngoId: next.ngo_id });
+    }
+    return admitted;
+};
+
+/** After the transaction commits: the NGO's page drops its waiting notice, the team hears of a new request. */
+export const announceAdmitted = (admitted) => {
+    for (const { id, ngoId } of admitted) {
+        notifyUpdated(ngoId, id, 'under_study');
+        notifyNewRequest(id);
+    }
+};
+
+/** Standalone run, e.g. after an admin raised a service's or center's maximum. */
+export const admitQueued = async (type, targetId, options) => {
+    const admitted = await inTransaction((client) => admitFromQueue(client, type, targetId, options));
+    announceAdmitted(admitted);
+    return admitted;
+};
+
+// The target a locked request belongs to (for admitFromQueue).
+const targetOf = (request) => (request.service_id != null
+    ? ['service', request.service_id]
+    : ['center', request.center_id]);
+
 // ── NGO actions ─────────────────────────────────────────────────────────────
 /** Saves a new draft, or submits it right away when data.submit is true. */
 export const createRequest = async (ngoId, data) => {
     await assertCanRequest(ngoId);
     await assertFilesExist(data.attachments);
-    const id = await inTransaction(async (client) => {
+    const created = await inTransaction(async (client) => {
         const target = await resolveTarget(client, data.type, data.targetId);
+        let status = 'draft';
         if (data.submit) {
             assertSubmittable(data, target);
-            await assertWithinLimits(client, ngoId, target);
+            status = (await checkLimits(client, ngoId, target)).queued ? 'queued' : 'under_study';
         }
-        const status = data.submit ? 'under_study' : 'draft';
         const { rows } = await client.query(
             `INSERT INTO service_requests (ref_code, ngo_id, target_type, service_id, center_id, target_name,
                  need_title, summary, description, contact_method, status, target_is_free, submitted_at)
@@ -341,22 +414,20 @@ export const createRequest = async (ngoId, data) => {
         const requestId = rows[0].id;
         await insertFiles(client, requestId, 'ngo', data.attachments, { documents: target.documents });
         await logStatus(client, requestId, {
-            status, label: data.submit ? SUBMITTED_LABEL : STATUS_LABELS.draft, actor: 'ngo',
+            status, label: data.submit ? SUBMITTED_LABEL : STATUS_LABELS.draft,
+            note: status === 'queued' ? QUEUED_NOTE : null, actor: 'ngo',
         });
-        return requestId;
+        return { requestId, status };
     });
-    if (data.submit) {
-        notifyUpdated(ngoId, id, 'under_study');
-        notifyNewRequest(id);
-    }
-    return getRequestForNgo(ngoId, id);
+    announceSubmitted(ngoId, created.requestId, created.status);
+    return getRequestForNgo(ngoId, created.requestId);
 };
 
 /** Replaces a draft's content (files included); submits it when data.submit is true. */
 export const updateDraft = async (ngoId, id, data) => {
     await assertCanRequest(ngoId);
     await assertFilesExist(data.attachments);
-    await inTransaction(async (client) => {
+    const status = await inTransaction(async (client) => {
         const { rows } = await client.query(
             'SELECT status FROM service_requests WHERE id = $1 AND ngo_id = $2 AND deleted_at IS NULL FOR UPDATE', [id, ngoId]
         );
@@ -365,9 +436,10 @@ export const updateDraft = async (ngoId, id, data) => {
             throw new HttpError(409, 'لا يمكن تعديل الطلب بعد إرساله', 'REQUEST_ALREADY_SUBMITTED');
         }
         const target = await resolveTarget(client, data.type, data.targetId);
+        let next = 'draft';
         if (data.submit) {
             assertSubmittable(data, target);
-            await assertWithinLimits(client, ngoId, target);
+            next = (await checkLimits(client, ngoId, target)).queued ? 'queued' : 'under_study';
         }
         await client.query(
             `UPDATE service_requests SET target_type = $2, service_id = $3, center_id = $4, target_name = $5,
@@ -378,16 +450,18 @@ export const updateDraft = async (ngoId, id, data) => {
                  updated_at = NOW()
              WHERE id = $1`,
             [id, target.type, target.serviceId, target.centerId, target.name, data.needTitle, data.summary,
-                data.description, data.contactMethod, data.submit ? 'under_study' : 'draft', data.submit, target.isFree]
+                data.description, data.contactMethod, next, data.submit, target.isFree]
         );
         await client.query("DELETE FROM request_files WHERE request_id = $1 AND kind = 'ngo'", [id]);
         await insertFiles(client, id, 'ngo', data.attachments, { documents: target.documents });
-        if (data.submit) await logStatus(client, id, { status: 'under_study', label: SUBMITTED_LABEL, actor: 'ngo' });
+        if (data.submit) {
+            await logStatus(client, id, {
+                status: next, label: SUBMITTED_LABEL, note: next === 'queued' ? QUEUED_NOTE : null, actor: 'ngo',
+            });
+        }
+        return next;
     });
-    if (data.submit) {
-        notifyUpdated(ngoId, id, 'under_study');
-        notifyNewRequest(id);
-    }
+    announceSubmitted(ngoId, id, status);
     return getRequestForNgo(ngoId, id);
 };
 
@@ -484,7 +558,7 @@ const forbidden = () => new HttpError(403, 'ليست لديك صلاحية له�
 const lockSubmitted = async (client, id, actor = null) => {
     const params = [id];
     const { rows } = await client.query(
-        `SELECT r.ngo_id, r.status, r.ref_code, r.assigned_to_user_id FROM service_requests r
+        `SELECT r.ngo_id, r.status, r.ref_code, r.assigned_to_user_id, r.service_id, r.center_id FROM service_requests r
          WHERE r.id = $1 AND r.status <> 'draft' AND r.deleted_at IS NULL AND ${scopeSql(actor, params)} FOR UPDATE OF r`,
         params
     );
@@ -514,8 +588,11 @@ export const changeStatus = async (id, actor, { status, label, note, missingItem
     if (status === 'needs_completion' && !missingItems.length && !note) {
         throw new HttpError(400, 'حدّد المستندات الناقصة أو اكتب ملاحظة للجمعية', 'COMPLETION_DETAILS_REQUIRED');
     }
-    const { ngoId, from } = await inTransaction(async (client) => {
+    const { ngoId, from, admitted } = await inTransaction(async (client) => {
         const request = await lockSubmitted(client, id, actor);
+        if (request.status === 'queued') {
+            throw new HttpError(409, 'الطلب في قائمة الانتظار، وسينتقل إلى الدراسة تلقائيًا فور توفر مكان', 'REQUEST_QUEUED');
+        }
         if (!statusPermissions(request.status, status).some(actor.can)) throw forbidden();
         if (status === 'needs_completion') {
             for (const name of missingItems) {
@@ -541,10 +618,16 @@ export const changeStatus = async (id, actor, { status, label, note, missingItem
                 : `${request.ref_code}: إضافة تحديث على سجل الطلب «${label || STATUS_LABELS[status]}»`,
             details: { from: request.status, to: status, label, missingItems },
         });
-        return { ngoId: request.ngo_id, from: request.status };
+        // Completed: its place is free for the next one on the waiting list.
+        const freed = OPEN_STATUSES.includes(request.status) && !OPEN_STATUSES.includes(status);
+        return {
+            ngoId: request.ngo_id, from: request.status,
+            admitted: freed ? await admitFromQueue(client, ...targetOf(request)) : [],
+        };
     });
     notifyUpdated(ngoId, id, status);
     notifyRequestStatus(id, { from, to: status, missingItems });
+    announceAdmitted(admitted);
     return getRequestForAdmin(id);
 };
 
@@ -575,7 +658,7 @@ export const addDeliverables = async (id, actor, files) => {
  * the row, files, messages and history stay in the database.
  */
 export const archiveRequest = async (id, actor) => {
-    const ngoId = await inTransaction(async (client) => {
+    const { ngoId, admitted } = await inTransaction(async (client) => {
         const request = await lockSubmitted(client, id, actor);
         await client.query(
             'UPDATE service_requests SET deleted_at = NOW(), deleted_by_user_id = $2 WHERE id = $1', [id, actor.id]
@@ -584,9 +667,12 @@ export const archiveRequest = async (id, actor) => {
             actorId: actor.id, action: 'request.archive', entityType: 'request', entityId: id,
             summary: `${request.ref_code}: أرشفة الطلب`,
         });
-        return request.ngo_id;
+        // An archived open request frees its place for the waiting list.
+        const admitted = OPEN_STATUSES.includes(request.status) ? await admitFromQueue(client, ...targetOf(request)) : [];
+        return { ngoId: request.ngo_id, admitted };
     });
     notifyUpdated(ngoId, id, null);
+    announceAdmitted(admitted);
     return { id };
 };
 

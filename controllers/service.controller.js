@@ -1,5 +1,6 @@
 import { changedFields, describeChanges, logActivity } from '../services/activityLog.service.js';
 import * as catalog from '../services/serviceCatalog.service.js';
+import { admitQueued } from '../services/requests.service.js';
 import { applyAllowedFields } from '../utils/catalogFields.js';
 import { handle } from '../utils/handle.js';
 import { HttpError } from '../utils/httpError.js';
@@ -45,7 +46,11 @@ export const create = handle('services create', 201, 'تم إنشاء الخدم
 export const update = handle('services update', 200, 'تم تحديث الخدمة', async (req) => {
     const current = await catalog.getService(req.params.id, { includeHidden: true });
     const before = savedInput(current);
-    const service = await catalog.updateService(req.params.id, applyAllowedFields(req.user, req.body, before));
+    let service = await catalog.updateService(req.params.id, applyAllowedFields(req.user, req.body, before));
+    // A higher (or removed) maximum lets waiting requests in right away.
+    if (service.queuedRequests && (await admitQueued('service', service.id)).length) {
+        service = await catalog.getService(service.id, { includeHidden: true });
+    }
     const changes = changedFields(before, savedInput(service), FIELD_LABELS)
         .map((label) => {
             if (label === FIELD_LABELS.price) return `السعر ${current.price ?? 'يحدد بعد الاجتماع'} ← ${service.price ?? 'يحدد بعد الاجتماع'}`;
@@ -77,6 +82,8 @@ export const updateStatus = handle('services status', 200, 'تم تحديث حا
 
 export const remove = handle('services delete', 200, 'تم حذف الخدمة', async (req) => {
     const current = await catalog.getService(req.params.id, { includeHidden: true });
+    // Nothing to wait for any more: whoever is on its waiting list goes to the team now.
+    if (current.queuedRequests) await admitQueued('service', current.id, { releaseAll: true });
     const result = await catalog.deleteService(req.params.id);
     await logActivity(null, {
         actorId: req.user.id, action: 'service.delete', entityType: 'service', entityId: current.id,

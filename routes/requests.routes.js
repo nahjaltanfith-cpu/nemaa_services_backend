@@ -44,7 +44,7 @@ import {
  *         summary: { type: string }
  *         description: { type: string }
  *         contactMethod: { type: string, enum: [call, meeting, session] }
- *         status: { type: string, enum: [draft, under_study, needs_completion, in_progress, completed] }
+ *         status: { type: string, enum: [draft, queued, under_study, needs_completion, in_progress, completed] }
  *         completionNote: { type: string, nullable: true }
  *         ngo: { type: object, properties: { id: { type: integer }, name: { type: string } } }
  *         unreadMessages: { type: integer }

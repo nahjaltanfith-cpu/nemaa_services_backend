@@ -1,5 +1,6 @@
 import { changedFields, describeChanges, logActivity } from '../services/activityLog.service.js';
 import * as catalog from '../services/centerCatalog.service.js';
+import { admitQueued } from '../services/requests.service.js';
 import { applyAllowedFields } from '../utils/catalogFields.js';
 import { handle } from '../utils/handle.js';
 import { HttpError } from '../utils/httpError.js';
@@ -44,7 +45,11 @@ export const create = handle('centers create', 201, 'تم إنشاء المرك�
 export const update = handle('centers update', 200, 'تم تحديث المركز', async (req) => {
     const current = await catalog.getCenter(req.params.id, { includeHidden: true });
     const before = savedInput(current);
-    const center = await catalog.updateCenter(req.params.id, applyAllowedFields(req.user, req.body, before));
+    let center = await catalog.updateCenter(req.params.id, applyAllowedFields(req.user, req.body, before));
+    // A higher (or removed) maximum lets waiting requests in right away.
+    if (center.queuedRequests && (await admitQueued('center', center.id)).length) {
+        center = await catalog.getCenter(center.id, { includeHidden: true });
+    }
     const changes = changedFields(before, savedInput(center), FIELD_LABELS)
         .map((label) => (label === FIELD_LABELS.price ? `السعر ${current.price ?? 'يحدد بعد الاجتماع'} ← ${center.price ?? 'يحدد بعد الاجتماع'}` : label));
     await logActivity(null, {
@@ -71,6 +76,8 @@ export const updateStatus = handle('centers status', 200, 'تم تحديث حا�
 
 export const remove = handle('centers delete', 200, 'تم حذف المركز', async (req) => {
     const current = await catalog.getCenter(req.params.id, { includeHidden: true });
+    // Nothing to wait for any more: whoever is on its waiting list goes to the team now.
+    if (current.queuedRequests) await admitQueued('center', current.id, { releaseAll: true });
     const result = await catalog.deleteCenter(req.params.id);
     await logActivity(null, {
         actorId: req.user.id, action: 'center.delete', entityType: 'center', entityId: current.id,

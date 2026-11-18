@@ -2,7 +2,7 @@ import Joi from 'joi';
 import { pageFields } from '../utils/pagination.js';
 import { TEMP_FILE_KEY_PATTERN } from '../services/upload.service.js';
 
-export const REQUEST_STATUSES = ['draft', 'under_study', 'needs_completion', 'in_progress', 'completed'];
+export const REQUEST_STATUSES = ['draft', 'queued', 'under_study', 'needs_completion', 'in_progress', 'completed'];
 // Statuses an admin can move a submitted request to (drafts belong to the NGO).
 export const ADMIN_STATUSES = ['under_study', 'needs_completion', 'in_progress', 'completed'];
 export const CONTACT_METHODS = ['call', 'meeting', 'session'];
