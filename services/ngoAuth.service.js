@@ -9,7 +9,7 @@ import { DOCUMENTS, NGO_COLUMNS, hasAllDocuments, toPublicNgo } from './ngo.mapp
 import { notifyNewNgo } from './notifications.service.js';
 import { EVENTS, emitToAdmins, emitToThread } from './realtime.service.js';
 import {
-    OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN_SECONDS, OTP_TTL_MINUTES,
+    OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN_SECONDS, OTP_TTL_MINUTES, emailVerificationRequired,
     generateOtp, hashOtp, otpMatches,
 } from './otp.service.js';
 
@@ -119,10 +119,22 @@ export const registerNgo = async ({ ngo, representative, documents }) => {
         if (error.code === '23503') throw new HttpError(400, 'المنطقة المختارة غير صالحة', 'REGION_NOT_FOUND');
         throw uniqueViolation(error);
     }
-    await deliverOtp(representative.email, code, 'verify_email');
+    const result = { email: representative.email, accountStatus, missingDocuments };
+    if (emailVerificationRequired()) {
+        await deliverOtp(representative.email, code, 'verify_email');
+    } else {
+        // Verification is off for now: the email counts as verified and the NGO is signed in right away.
+        const { rows } = await pool.query(
+            `UPDATE ngos SET email_verified_at = NOW(), otp_code = NULL, otp_purpose = NULL,
+                 otp_expires_at = NULL, otp_attempts = 0
+             WHERE id = $1 RETURNING ${NGO_COLUMNS}`,
+            [ngoId]
+        );
+        Object.assign(result, session(rows[0]));
+    }
     emitToAdmins(EVENTS.NGO_UPDATED, { ngoId });
     notifyNewNgo(ngoId);
-    return { email: representative.email, accountStatus, missingDocuments };
+    return result;
 };
 
 export const verifyEmail = async ({ email, otp_code: code }) => {
@@ -153,7 +165,12 @@ export const loginNgo = async ({ email, password }) => {
         throw new HttpError(401, 'البريد الإلكتروني أو كلمة المرور غير صحيحة', 'INVALID_CREDENTIALS');
     }
     if (!row.email_verified_at) {
-        throw new HttpError(403, 'يرجى تأكيد البريد الإلكتروني أولًا', 'EMAIL_NOT_VERIFIED');
+        if (emailVerificationRequired()) {
+            throw new HttpError(403, 'يرجى تأكيد البريد الإلكتروني أولًا', 'EMAIL_NOT_VERIFIED');
+        }
+        // Signed up while codes weren't arriving: count the email as verified so the team sees the NGO.
+        await pool.query('UPDATE ngos SET email_verified_at = NOW() WHERE id = $1 AND email_verified_at IS NULL', [row.id]);
+        emitToAdmins(EVENTS.NGO_UPDATED, { ngoId: row.id });
     }
     return session(row);
 };

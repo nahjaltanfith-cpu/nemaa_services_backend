@@ -4,7 +4,7 @@ import { handle } from '../utils/handle.js';
 // Same generic answer whether or not the email exists, to prevent account enumeration.
 const OTP_SENT_MESSAGE = 'إذا كان البريد مسجّلًا لدينا فسيصلك رمز التحقق خلال دقائق';
 
-export const register = handle('ngo-auth register', 201, 'تم إنشاء الحساب، يرجى تأكيد البريد الإلكتروني',
+export const register = handle('ngo-auth register', 201, 'تم إنشاء الحساب',
     (req) => ngoAuth.registerNgo(req.body));
 
 export const verifyEmail = handle('ngo-auth verify-email', 200, 'تم تأكيد البريد الإلكتروني',
