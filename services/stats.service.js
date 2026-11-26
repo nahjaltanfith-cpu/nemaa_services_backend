@@ -1,4 +1,5 @@
 import pool from '../db.js';
+import { applicantSql } from './otp.service.js';
 import { scopeSql } from './requestScope.js';
 
 /**
@@ -55,7 +56,8 @@ export const getAdminOverview = async (viewer, { includeNgos = false } = {}) => 
             params
         ),
         includeNgos
-            ? pool.query('SELECT account_status AS status, COUNT(*)::int AS count FROM ngos GROUP BY account_status')
+            // Same NGOs as the NGOs page, so the two numbers always match.
+            ? pool.query(`SELECT account_status AS status, COUNT(*)::int AS count FROM ngos WHERE ${applicantSql()} GROUP BY account_status`)
             : null,
     ]);
 

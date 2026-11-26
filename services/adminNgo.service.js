@@ -2,13 +2,12 @@ import pool from '../db.js';
 import { countsBy, likeTerm, pageSql } from '../utils/pagination.js';
 import { HttpError } from '../utils/httpError.js';
 import { DOCUMENTS, NGO_COLUMNS, toPublicNgo } from './ngo.mapper.js';
+import { applicantSql } from './otp.service.js';
 import { EVENTS, emitToThread } from './realtime.service.js';
 import { deleteFiles, keyFromPublicUrl } from './upload.service.js';
 
 const notFound = () => new HttpError(404, 'الجمعية غير موجودة', 'NOT_FOUND');
 
-// Only NGOs that confirmed their email are real applicants.
-const VERIFIED = 'email_verified_at IS NOT NULL';
 
 /**
  * Verified NGOs, newest first; unread counts are messages from the NGO not yet read by staff.
@@ -17,7 +16,7 @@ const VERIFIED = 'email_verified_at IS NOT NULL';
  */
 export const listNgos = async ({ status, search, page, pageSize } = {}) => {
     const params = [];
-    const where = [VERIFIED];
+    const where = [applicantSql()];
     if (status) {
         params.push(status);
         where.push(`account_status = $${params.length}`);
@@ -36,7 +35,7 @@ export const listNgos = async ({ status, search, page, pageSize } = {}) => {
     const [{ rows }, { rows: totalRows }, { rows: statusRows }] = await Promise.all([
         pool.query(`SELECT ${NGO_COLUMNS} FROM ngos ${whereSql} ORDER BY created_at DESC, id DESC ${limit}`, pageParams),
         pool.query(`SELECT COUNT(*) AS count FROM ngos ${whereSql}`, params),
-        pool.query(`SELECT account_status AS key, COUNT(*) AS count FROM ngos WHERE ${VERIFIED} GROUP BY account_status`),
+        pool.query(`SELECT account_status AS key, COUNT(*) AS count FROM ngos WHERE ${applicantSql()} GROUP BY account_status`),
     ]);
     const byStatus = countsBy(statusRows);
     return {
@@ -49,7 +48,7 @@ export const listNgos = async ({ status, search, page, pageSize } = {}) => {
 };
 
 export const getNgo = async (id) => {
-    const { rows } = await pool.query(`SELECT ${NGO_COLUMNS} FROM ngos WHERE id = $1 AND ${VERIFIED}`, [id]);
+    const { rows } = await pool.query(`SELECT ${NGO_COLUMNS} FROM ngos WHERE id = $1 AND ${applicantSql()}`, [id]);
     if (!rows.length) throw notFound();
     return toPublicNgo(rows[0], 'admin');
 };
@@ -64,7 +63,7 @@ export const updateNgoStatus = async (id, { status, notes }) => {
          SET account_status = $2,
              admin_notes = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE admin_notes END,
              status_updated_at = NOW(), updated_at = NOW()
-         WHERE id = $1 AND ${VERIFIED}
+         WHERE id = $1 AND ${applicantSql()}
          RETURNING ${NGO_COLUMNS}`,
         [id, status, notes || null]
     );
@@ -79,7 +78,7 @@ export const updateNgoStatus = async (id, { status, notes }) => {
 /** Exempts the NGO from every request limit, or puts it back under them. */
 export const setLimitsExempt = async (id, exempt) => {
     const { rows } = await pool.query(
-        `UPDATE ngos SET limits_exempt = $2, updated_at = NOW() WHERE id = $1 AND ${VERIFIED} RETURNING ${NGO_COLUMNS}`,
+        `UPDATE ngos SET limits_exempt = $2, updated_at = NOW() WHERE id = $1 AND ${applicantSql()} RETURNING ${NGO_COLUMNS}`,
         [id, exempt]
     );
     if (!rows.length) throw notFound();
@@ -95,7 +94,7 @@ export const deleteNgoDocument = async (id, documentKey) => {
     const doc = DOCUMENTS.find(({ key }) => key === documentKey);
     if (!doc) throw new HttpError(404, 'المستند غير موجود', 'NOT_FOUND');
     // The column name comes from DOCUMENTS (fixed list), never from the request.
-    const { rows } = await pool.query(`SELECT ${doc.column} AS file_key FROM ngos WHERE id = $1 AND ${VERIFIED}`, [id]);
+    const { rows } = await pool.query(`SELECT ${doc.column} AS file_key FROM ngos WHERE id = $1 AND ${applicantSql()}`, [id]);
     if (!rows.length) throw notFound();
     if (!rows[0].file_key) throw new HttpError(404, 'المستند غير مرفوع', 'NOT_FOUND');
     const updated = await pool.query(

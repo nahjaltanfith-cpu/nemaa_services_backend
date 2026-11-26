@@ -8,6 +8,10 @@ export const OTP_RESEND_COOLDOWN_SECONDS = 60;
 // at registration, and login no longer waits for a code. Set REQUIRE_EMAIL_VERIFICATION=true to restore it.
 export const emailVerificationRequired = () => process.env.REQUIRE_EMAIL_VERIFICATION === 'true';
 
+// Which NGO rows the team sees (list, counts, dashboard numbers): only confirmed emails while
+// verification is on; every registration while it is off (nobody can confirm without the code).
+export const applicantSql = () => (emailVerificationRequired() ? 'email_verified_at IS NOT NULL' : 'TRUE');
+
 // DEV_FIXED_OTP (e.g. 111111) makes every code predictable for manual testing; development only.
 export const generateOtp = () => {
     const fixed = process.env.DEV_FIXED_OTP?.trim();
