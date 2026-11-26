@@ -1,7 +1,7 @@
 import pool from '../db.js';
 import { P } from '../config/permissions.js';
 import {
-    contactRequestEmail, newRequestStaffEmail, ngoApprovedEmail, ngoNeedsDocumentsEmail, requestCompletedEmail,
+    contactRequestEmail, newNgoRegistrationEmail, newRequestStaffEmail, ngoApprovedEmail, ngoNeedsDocumentsEmail, requestCompletedEmail,
     requestNeedsCompletionEmail,
 } from '../templates/emailTemplates.js';
 import { CONTACT_TYPES } from './contact.service.js';
@@ -11,7 +11,8 @@ import { ROLE_COVERS_REQUEST } from './requestScope.js';
 /**
  * Email only for milestones that need someone to act or that close a case:
  *   NGO account needs documents / approved · request needs completion / completed (to the NGO)
- *   new request submitted (to the staff who route requests) · contact-form message (to the team inbox)
+ *   new request submitted (to the staff who route requests) · new NGO registration (to the super admins)
+ *   · contact-form message (to the team inbox)
  *   · OTP (services/email.service.js).
  * Everything else (intermediate statuses, notes, chat) stays as in-app updates.
  * Callers run these after their transaction commits; they never throw.
@@ -106,6 +107,27 @@ export const notifyNewRequest = (requestId) => safely('new request', async () =>
                 staffName: member.name, ngoName: request.ngo_name, refCode: request.ref_code,
                 needTitle: request.need_title, targetName: request.target_name,
                 url: `${DASHBOARD_URL()}/dashboard/requests/${request.id}`,
+            }),
+        });
+    }
+});
+
+// ── New NGO registration ────────────────────────────────────────────────────
+/** An NGO created an account: one email per active super admin, with a link to its page in the dashboard. */
+export const notifyNewNgo = (ngoId) => safely('new ngo', async () => {
+    const { rows: [ngo] } = await pool.query(
+        `SELECT id, ngo_name, reg_number, representative_name, email, mobile, account_status FROM ngos WHERE id = $1`,
+        [ngoId]
+    );
+    if (!ngo) return;
+    const { rows: admins } = await pool.query(SUPER_ADMINS_SQL);
+    for (const admin of admins) {
+        queueEmail({
+            to: admin.email,
+            ...newNgoRegistrationEmail({
+                staffName: admin.name, ngoName: ngo.ngo_name, regNumber: ngo.reg_number,
+                representativeName: ngo.representative_name, email: ngo.email, mobile: ngo.mobile,
+                complete: ngo.account_status === 'new', url: `${DASHBOARD_URL()}/dashboard/ngos/${ngo.id}`,
             }),
         });
     }

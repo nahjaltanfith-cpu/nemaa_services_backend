@@ -6,6 +6,7 @@ import { HttpError } from '../utils/httpError.js';
 import { sendOtpEmail } from './email.service.js';
 import { fileExists } from './upload.service.js';
 import { DOCUMENTS, NGO_COLUMNS, hasAllDocuments, toPublicNgo } from './ngo.mapper.js';
+import { notifyNewNgo } from './notifications.service.js';
 import { EVENTS, emitToAdmins, emitToThread } from './realtime.service.js';
 import {
     OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN_SECONDS, OTP_TTL_MINUTES,
@@ -120,6 +121,7 @@ export const registerNgo = async ({ ngo, representative, documents }) => {
     }
     await deliverOtp(representative.email, code, 'verify_email');
     emitToAdmins(EVENTS.NGO_UPDATED, { ngoId });
+    notifyNewNgo(ngoId);
     return { email: representative.email, accountStatus, missingDocuments };
 };
 

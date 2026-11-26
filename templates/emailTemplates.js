@@ -215,6 +215,29 @@ export const newRequestStaffEmail = ({ ngoName, refCode, targetName, url }) => (
         'يرجى مراجعة بيانات الطلب ومرفقاته وتحديد الإجراء المناسب.', url]),
 });
 
+// ── New NGO registration (to the super admins) ──────────────────────────────
+export const newNgoRegistrationEmail = ({ staffName, ngoName, regNumber, representativeName, email, mobile, complete, url }) => {
+    const statusLine = complete
+        ? 'أرفقت الجمعية مستنداتها، والحساب بانتظار المراجعة والاعتماد.'
+        : 'لم تُرفق الجمعية كل المستندات المطلوبة بعد، وسيبقى الحساب بانتظار استكمالها.';
+    return {
+        subject: `تسجيل جمعية جديدة: ${ngoName}`,
+        html: layout({
+            preheader: `${ngoName} سجّلت حسابًا جديدًا في ${PLATFORM}`,
+            heading: 'تسجيل جمعية جديدة',
+            body: `${paragraph(`مرحبًا ${staffName}،`)}
+          ${paragraph(`سجّلت جمعية جديدة حسابًا في ${PLATFORM}.`)}
+          ${details([['اسم الجمعية', ngoName], ['رقم الترخيص', regNumber], ['اسم الممثل', representativeName],
+            ['البريد الإلكتروني', email], ['الجوال', mobile]])}
+          ${paragraph(statusLine)}
+          ${button('مراجعة الجمعية', url)}`,
+        }),
+        text: textOf([`مرحبًا ${staffName}،`, `سجّلت جمعية جديدة حسابًا في ${PLATFORM}: ${ngoName}`,
+            `رقم الترخيص: ${regNumber}`, `الممثل: ${representativeName}`, `البريد: ${email}`, `الجوال: ${mobile}`, '',
+            statusLine, url]),
+    };
+};
+
 // ── Contact form (to the team inbox) ────────────────────────────────────────
 export const contactRequestEmail = ({ typeLabel, fullName, organizationName, email, phone, message, url }) => ({
     subject: `رسالة تواصل جديدة بشأن ${typeLabel} من ${fullName}`,
