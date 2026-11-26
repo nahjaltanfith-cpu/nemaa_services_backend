@@ -91,6 +91,12 @@ const checkOtp = async (email, code, purpose) => {
     return rows[0].otp_code;
 };
 
+// Admins hear about a registration once its email is verified, so typos and abandoned sign-ups stay quiet.
+const announceNewNgo = (ngoId) => {
+    emitToAdmins(EVENTS.NGO_UPDATED, { ngoId });
+    notifyNewNgo(ngoId);
+};
+
 export const registerNgo = async ({ ngo, representative, documents }) => {
     const code = generateOtp();
     const passwordHash = await bcrypt.hash(representative.password, BCRYPT_ROUNDS);
@@ -99,6 +105,16 @@ export const registerNgo = async ({ ngo, representative, documents }) => {
     // Complete registrations wait for an admin ('new'); missing files are requested later.
     const accountStatus = missingDocuments.length ? 'needs_documents' : 'new';
     let ngoId;
+    if (emailVerificationRequired()) {
+        // A registration whose email was never verified is an abandoned attempt (usually a mistyped
+        // email): signing up again with the same registration number or email replaces it.
+        await pool.query(
+            `DELETE FROM ngos n
+             WHERE n.email_verified_at IS NULL AND (n.reg_number = $1 OR LOWER(n.email) = LOWER($2))
+               AND NOT EXISTS (SELECT 1 FROM service_requests r WHERE r.ngo_id = n.id)`,
+            [ngo.regNumber, representative.email]
+        );
+    }
     try {
         const { rows } = await pool.query(
             `INSERT INTO ngos (ngo_name, reg_number, field_of_work, representative_name,
@@ -131,9 +147,8 @@ export const registerNgo = async ({ ngo, representative, documents }) => {
             [ngoId]
         );
         Object.assign(result, session(rows[0]));
+        announceNewNgo(ngoId);
     }
-    emitToAdmins(EVENTS.NGO_UPDATED, { ngoId });
-    notifyNewNgo(ngoId);
     return result;
 };
 
@@ -149,6 +164,7 @@ export const verifyEmail = async ({ email, otp_code: code }) => {
         [email, otpHash]
     );
     if (!rows.length) throw invalidOtp();
+    announceNewNgo(rows[0].id);
     return session(rows[0]);
 };
 

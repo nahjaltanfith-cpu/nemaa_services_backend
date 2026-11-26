@@ -7,6 +7,7 @@ import { countsBy, likeTerm, pageSql } from '../utils/pagination.js';
 import { logActivity } from './activityLog.service.js';
 import { UPLOADS_PUBLIC_PATH, UPLOADS_ROOT, deleteFiles, publicUrl } from './upload.service.js';
 import { EXCEPTION_TYPES } from './fileSafety.service.js';
+import { emailVerificationRequired } from './otp.service.js';
 
 /**
  * Media registry (table media_files): what is stored, how big it is, and what uses it.
@@ -100,8 +101,27 @@ const scanStorage = async (client) => {
     return { scanned: keys.length };
 };
 
+// Sign-ups whose email was never verified within this many days are abandoned (usually a mistyped email)
+const ABANDONED_SIGNUP_DAYS = 7;
+
+/**
+ * Deletes abandoned sign-ups, so their documents turn 'orphaned' and show up as unused files.
+ * Only while email verification is on: otherwise unverified accounts are real applicants.
+ */
+const dropAbandonedSignups = async (client) => {
+    if (!emailVerificationRequired()) return;
+    const { rowCount } = await client.query(
+        `DELETE FROM ngos n
+         WHERE n.email_verified_at IS NULL AND n.created_at < NOW() - make_interval(days => $1)
+           AND NOT EXISTS (SELECT 1 FROM service_requests r WHERE r.ngo_id = n.id)`,
+        [ABANDONED_SIGNUP_DAYS]
+    );
+    if (rowCount) console.log(`[media] removed ${rowCount} unverified sign-up(s) older than ${ABANDONED_SIGNUP_DAYS} days`);
+};
+
 /** Derives owner / usage / status of every registered file from the domain tables. */
 const reconcile = async (client) => {
+    await dropAbandonedSignups(client);
     // Used now → attached (first reference wins when a file is shared, e.g. a seeded image)
     await client.query(`
         WITH refs AS (SELECT DISTINCT ON (key) * FROM (${REFERENCES_SQL}) r WHERE key IS NOT NULL ORDER BY key)
