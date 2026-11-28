@@ -53,11 +53,37 @@ const text = (label, min, max) => Joi.string().trim().min(min).max(max).required
         'string.max': `${label} طويل جدًا`,
     });
 
+const ARABIC_DIGITS = /[\u0660-\u0669\u06F0-\u06F9]/g;
+/**
+ * Saudi mobile in any common form -> 05XXXXXXXX: +966 5..., 00966 5..., 966 5..., 5... (9 digits), 05...,
+ * with spaces, dashes, brackets or Arabic digits. Anything else is left for the pattern to reject.
+ */
+export const normalizeMobile = (value) => {
+    let digits = String(value ?? '')
+        .replace(ARABIC_DIGITS, (d) => String(d.charCodeAt(0) & 0xF))
+        .replace(/[\s\-().]/g, '');
+    digits = digits.replace(/^(\+|00)?966/, '');
+    if (/^5\d{8}$/.test(digits)) return `0${digits}`;
+    return digits;
+};
+const MOBILE_MESSAGES = {
+    'string.empty': 'رقم الجوال مطلوب',
+    'any.required': 'رقم الجوال مطلوب',
+    'string.pattern.base': 'رقم الجوال غير صحيح، مثال: 05xxxxxxxx',
+};
+// Normalised first, then checked
+export const mobileField = () => Joi.string().trim()
+    .custom((value) => normalizeMobile(value)).pattern(/^05\d{8}$/).messages(MOBILE_MESSAGES);
+
+const optionalText = (label, min, max) => Joi.string().trim().min(min).max(max).allow(null, '').default(null)
+    .messages({ 'string.min': `${label} ${min} أحرف على الأقل`, 'string.max': `${label} طويل جدًا` });
+
 // Storage keys returned by POST /api/upload. Optional: a failed upload must not block
 // registration, and keys that do not point to a real upload are dropped by the service.
 const documentKey = Joi.string().trim().max(255).allow(null, '').default(null);
 
-// Matches the payload built by RegisterNgoView.vue.
+// Matches the payload built by RegisterNgoView.vue. The short sign-up sends the NGO name, registration
+// number, email, mobile and password; the rest is optional here and completed from the profile.
 export const registerSchema = Joi.object({
     documents: Joi.object({
         ngoDocument: documentKey,
@@ -73,22 +99,16 @@ export const registerSchema = Joi.object({
                 'string.pattern.base': 'رقم التسجيل أرقام فقط',
                 'string.max': 'رقم التسجيل طويل جدًا',
             }),
-        fieldOfWork: text('مجال العمل', 1, 200),
+        fieldOfWork: optionalText('مجال العمل', 1, 200),
         // One of the regions table (migration 028).
-        regionId: Joi.number().integer().positive().required()
-            .messages({ 'any.required': 'المنطقة مطلوبة', 'number.base': 'المنطقة مطلوبة' }),
+        regionId: Joi.number().integer().positive().allow(null).default(null)
+            .messages({ 'number.base': 'المنطقة غير صالحة' }),
     }).required().messages({ 'any.required': 'بيانات الجمعية مطلوبة' }),
     representative: Joi.object({
-        representativeName: text('اسم الممثل', 3, 200),
-        position: text('الصفة', 2, 100)
-            .messages({ 'string.empty': 'الصفة مطلوبة', 'any.required': 'الصفة مطلوبة' }),
+        representativeName: optionalText('اسم الممثل', 3, 200),
+        position: optionalText('الصفة', 2, 100),
         email,
-        mobile: Joi.string().trim().pattern(/^05\d{8}$/).required()
-            .messages({
-                'string.empty': 'رقم الجوال مطلوب',
-                'any.required': 'رقم الجوال مطلوب',
-                'string.pattern.base': 'رقم الجوال يجب أن يبدأ بـ 05 ويكون 10 أرقام',
-            }),
+        mobile: mobileField().required(),
         password,
     }).required().messages({ 'any.required': 'بيانات الممثل مطلوبة' }),
 });

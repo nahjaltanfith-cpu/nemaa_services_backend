@@ -1,6 +1,7 @@
 import Joi from 'joi';
 import { ACCOUNT_STATUSES } from '../services/ngo.mapper.js';
 import { MAX_MESSAGE_LENGTH } from '../services/messages.service.js';
+import { mobileField } from './ngoAuth.validator.js';
 
 export const statusUpdateSchema = Joi.object({
     status: Joi.string().valid(...ACCOUNT_STATUSES).required()
@@ -45,8 +46,8 @@ export const profileUpdateSchema = Joi.object({
     fieldOfWork: optionalText('مجال العمل', 1, 200),
     representativeName: optionalText('اسم الممثل', 3, 200),
     position: optionalText('الصفة', 2, 100),
-    mobile: Joi.string().trim().pattern(/^05\d{8}$/)
-        .messages({ 'string.pattern.base': 'رقم الجوال يجب أن يبدأ بـ 05 ويكون 10 أرقام' }),
+    mobile: mobileField(),
+    regionId: Joi.number().integer().positive().messages({ 'number.base': 'المنطقة غير صالحة' }),
 });
 
 export const statusFilterSchema = Joi.string().valid(...ACCOUNT_STATUSES);

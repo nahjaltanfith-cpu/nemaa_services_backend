@@ -19,7 +19,19 @@ export const NGO_COLUMNS = `id, ngo_name, reg_number, field_of_work, representat
     (SELECT COUNT(*) FROM ngo_messages m
       WHERE m.ngo_id = ngos.id AND m.sender_type = 'ngo' AND m.read_at IS NULL) AS unread_from_ngo`;
 
-export const hasAllDocuments = (row) => DOCUMENTS.every(({ column }) => row[column]);
+
+// What the short sign-up leaves for the profile: these and both documents, before review can start
+export const PROFILE_REQUIREMENTS = [
+    { column: 'field_of_work', label: 'مجال العمل' },
+    { column: 'region_id', label: 'المنطقة' },
+    { column: 'representative_name', label: 'اسم الممثل' },
+    { column: 'position', label: 'صفة الممثل' },
+];
+/** Labels of what is still missing (profile fields, then documents); empty when the file is complete. */
+export const missingForReview = (row) => [
+    ...PROFILE_REQUIREMENTS.filter(({ column }) => !row[column]).map(({ label }) => label),
+    ...DOCUMENTS.filter(({ column }) => !row[column]).map(({ label }) => label),
+];
 
 /** API shape of an NGO. `viewer` decides which side's unread count is exposed. */
 export const toPublicNgo = (row, viewer = 'ngo') => ({

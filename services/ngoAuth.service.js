@@ -5,7 +5,7 @@ import { NGO_ROLE } from '../middlewares/auth.middleware.js';
 import { HttpError } from '../utils/httpError.js';
 import { sendOtpEmail } from './email.service.js';
 import { fileExists } from './upload.service.js';
-import { DOCUMENTS, NGO_COLUMNS, hasAllDocuments, toPublicNgo } from './ngo.mapper.js';
+import { DOCUMENTS, NGO_COLUMNS, missingForReview, toPublicNgo } from './ngo.mapper.js';
 import { notifyNewNgo } from './notifications.service.js';
 import { EVENTS, emitToAdmins, emitToThread } from './realtime.service.js';
 import {
@@ -102,8 +102,12 @@ export const registerNgo = async ({ ngo, representative, documents }) => {
     const passwordHash = await bcrypt.hash(representative.password, BCRYPT_ROUNDS);
     const keys = await resolveDocumentKeys(documents);
     const missingDocuments = DOCUMENTS.filter(({ column }) => !keys[column]).map(({ key }) => key);
-    // Complete registrations wait for an admin ('new'); missing files are requested later.
-    const accountStatus = missingDocuments.length ? 'needs_documents' : 'new';
+    // Complete registrations wait for an admin ('new'); a short sign-up completes its profile first.
+    const complete = !missingForReview({
+        ...keys, field_of_work: ngo.fieldOfWork, region_id: ngo.regionId,
+        representative_name: representative.representativeName, position: representative.position,
+    }).length;
+    const accountStatus = complete ? 'new' : 'needs_documents';
     let ngoId;
     if (emailVerificationRequired()) {
         // A registration whose email was never verified is an abandoned attempt (usually a mistyped
@@ -242,6 +246,7 @@ const PROFILE_FIELDS = {
     representativeName: 'representative_name',
     position: 'position',
     mobile: 'mobile',
+    regionId: 'region_id',
 };
 
 export const updateNgoProfile = async (id, changes) => {
@@ -258,6 +263,7 @@ export const updateNgoProfile = async (id, changes) => {
         emitToAdmins(EVENTS.NGO_UPDATED, { ngoId: id });
         return toPublicNgo(rows[0]);
     } catch (error) {
+        if (error.code === '23503') throw new HttpError(400, 'المنطقة المختارة غير صالحة', 'REGION_NOT_FOUND');
         throw uniqueViolation(error);
     }
 };
@@ -281,8 +287,9 @@ export const resubmitForReview = async (id) => {
     if (row.account_status !== 'needs_documents') {
         throw new HttpError(409, 'لا يوجد طلب استكمال مفتوح لإعادة الإرسال', 'NOT_AWAITING_COMPLETION');
     }
-    if (!hasAllDocuments(row)) {
-        throw new HttpError(400, 'يرجى رفع جميع المستندات المطلوبة أولًا', 'DOCUMENTS_MISSING');
+    const missing = missingForReview(row);
+    if (missing.length) {
+        throw new HttpError(400, `أكمل أولًا: ${missing.join('، ')}`, 'PROFILE_INCOMPLETE');
     }
     // The NGO made this change itself, so it is not an unseen update for them.
     const { rows } = await pool.query(

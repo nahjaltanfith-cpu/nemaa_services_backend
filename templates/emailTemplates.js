@@ -218,8 +218,10 @@ export const newRequestStaffEmail = ({ ngoName, refCode, targetName, url }) => (
 // ── New NGO registration (to the super admins) ──────────────────────────────
 export const newNgoRegistrationEmail = ({ staffName, ngoName, regNumber, representativeName, email, mobile, complete, url }) => {
     const statusLine = complete
-        ? 'أرفقت الجمعية مستنداتها، والحساب بانتظار المراجعة والاعتماد.'
-        : 'لم تُرفق الجمعية كل المستندات المطلوبة بعد، وسيبقى الحساب بانتظار استكمالها.';
+        ? 'أكملت الجمعية بياناتها ومستنداتها، والحساب بانتظار المراجعة والاعتماد.'
+        : 'ستُكمل الجمعية بياناتها ومستنداتها من داخل المنصة، ثم ترسلها للمراجعة.';
+    // Short sign-up: the representative is filled in later from the profile
+    representativeName = representativeName || '—';
     return {
         subject: `تسجيل جمعية جديدة: ${ngoName}`,
         html: layout({
