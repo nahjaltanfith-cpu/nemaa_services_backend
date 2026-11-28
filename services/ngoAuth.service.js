@@ -6,7 +6,7 @@ import { HttpError } from '../utils/httpError.js';
 import { sendOtpEmail } from './email.service.js';
 import { fileExists } from './upload.service.js';
 import { DOCUMENTS, NGO_COLUMNS, missingForReview, toPublicNgo } from './ngo.mapper.js';
-import { notifyNewNgo } from './notifications.service.js';
+import { notifyNewNgo, notifyNgoUpdated } from './notifications.service.js';
 import { EVENTS, emitToAdmins, emitToThread } from './realtime.service.js';
 import {
     OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN_SECONDS, OTP_TTL_MINUTES, emailVerificationRequired,
@@ -236,7 +236,19 @@ export const attachNgoDocument = async (id, documentType, key) => {
     );
     if (!rows.length) throw new HttpError(404, 'الحساب غير موجود', 'NOT_FOUND');
     emitToAdmins(EVENTS.NGO_UPDATED, { ngoId: id });
+    announceUpdate(rows[0], [document.label]);
     return toPublicNgo(rows[0]);
+};
+
+// While the NGO is completing its file the team hears once, when it is sent for review (resubmitForReview).
+// Otherwise (new / under review / approved) every change is announced and the status stays as it is.
+const announceUpdate = (row, changes) => {
+    if (row.account_status === 'needs_documents' || !changes.length) return;
+    notifyNgoUpdated(row.id, { changes });
+};
+
+const PROFILE_LABELS = {
+    fieldOfWork: 'مجال العمل', representativeName: 'اسم الممثل', position: 'الصفة', mobile: 'رقم الجوال', regionId: 'المنطقة',
 };
 
 // Fields an NGO may correct itself. The email (login identity), the NGO name and the registration
@@ -252,6 +264,7 @@ const PROFILE_FIELDS = {
 export const updateNgoProfile = async (id, changes) => {
     const entries = Object.entries(PROFILE_FIELDS).filter(([field]) => changes[field] !== undefined);
     if (!entries.length) return getNgoProfile(id);
+    const { rows: [before] } = await pool.query('SELECT * FROM ngos WHERE id = $1', [id]);
     // Column names come from PROFILE_FIELDS, never from the request.
     const assignments = entries.map(([, column], index) => `${column} = $${index + 2}`).join(', ');
     try {
@@ -261,6 +274,10 @@ export const updateNgoProfile = async (id, changes) => {
         );
         if (!rows.length) throw new HttpError(404, 'الحساب غير موجود', 'NOT_FOUND');
         emitToAdmins(EVENTS.NGO_UPDATED, { ngoId: id });
+        const changed = entries
+            .filter(([, column]) => String(before?.[column] ?? '') !== String(rows[0][column] ?? ''))
+            .map(([field]) => PROFILE_LABELS[field]);
+        announceUpdate(rows[0], changed);
         return toPublicNgo(rows[0]);
     } catch (error) {
         if (error.code === '23503') throw new HttpError(400, 'المنطقة المختارة غير صالحة', 'REGION_NOT_FOUND');
@@ -300,6 +317,8 @@ export const resubmitForReview = async (id) => {
         [id]
     );
     if (!rows.length) throw new HttpError(409, 'لا يوجد طلب استكمال مفتوح لإعادة الإرسال', 'NOT_AWAITING_COMPLETION');
+    emitToAdmins(EVENTS.NGO_UPDATED, { ngoId: id });
+    notifyNgoUpdated(id, { submitted: true });
     const ngo = toPublicNgo(rows[0]);
     emitToThread(id, EVENTS.NGO_STATUS, {
         ngoId: id, accountStatus: ngo.accountStatus, adminNotes: ngo.adminNotes, statusUpdatedAt: ngo.statusUpdatedAt,

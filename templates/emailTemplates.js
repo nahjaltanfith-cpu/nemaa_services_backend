@@ -258,3 +258,30 @@ export const contactRequestEmail = ({ typeLabel, fullName, organizationName, ema
         `نوع الرسالة: ${typeLabel}`, organizationName && `الجمعية / الجهة: ${organizationName}`, phone && `الجوال / واتساب: ${phone}`,
         '', 'نص الرسالة:', message, '', 'يرجى الاطلاع عليها ومتابعتها.', url]),
 });
+
+// ── NGO updated its profile / sent its file for review (to the super admins) ─
+/**
+ * changes: labels of what changed (fields or documents); submitted: the NGO completed its file and
+ * sent it for review. An approved NGO keeps its status and can keep submitting requests.
+ */
+export const ngoProfileUpdatedEmail = ({ staffName, ngoName, regNumber, changes = [], submitted = false, url }) => {
+    const heading = submitted ? 'جمعية أرسلت ملفها للمراجعة' : 'جمعية حدّثت بياناتها';
+    const summary = submitted
+        ? `أكملت ${ngoName} بياناتها ومستنداتها وأرسلت الملف للمراجعة.`
+        : `حدّثت ${ngoName} بياناتها في ${PLATFORM}.`;
+    const rows = [['اسم الجمعية', ngoName], ['رقم الترخيص', regNumber]];
+    if (changes.length) rows.push(['ما تغيّر', changes.join('، ')]);
+    return {
+        subject: `${heading}: ${ngoName}`,
+        html: layout({
+            preheader: summary,
+            heading,
+            body: `${paragraph(`مرحبًا ${staffName}،`)}
+          ${paragraph(summary)}
+          ${details(rows)}
+          ${button(submitted ? 'مراجعة الجمعية' : 'عرض الجمعية', url)}`,
+        }),
+        text: textOf([`مرحبًا ${staffName}،`, summary, `رقم الترخيص: ${regNumber}`,
+            ...(changes.length ? [`ما تغيّر: ${changes.join('، ')}`] : []), '', url]),
+    };
+};

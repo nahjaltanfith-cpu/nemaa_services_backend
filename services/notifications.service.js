@@ -1,7 +1,8 @@
 import pool from '../db.js';
 import { P } from '../config/permissions.js';
 import {
-    contactRequestEmail, newNgoRegistrationEmail, newRequestStaffEmail, ngoApprovedEmail, ngoNeedsDocumentsEmail, requestCompletedEmail,
+    contactRequestEmail, newNgoRegistrationEmail, newRequestStaffEmail, ngoApprovedEmail, ngoNeedsDocumentsEmail, ngoProfileUpdatedEmail,
+    requestCompletedEmail,
     requestNeedsCompletionEmail,
 } from '../templates/emailTemplates.js';
 import { CONTACT_TYPES } from './contact.service.js';
@@ -128,6 +129,25 @@ export const notifyNewNgo = (ngoId) => safely('new ngo', async () => {
                 staffName: admin.name, ngoName: ngo.ngo_name, regNumber: ngo.reg_number,
                 representativeName: ngo.representative_name, email: ngo.email, mobile: ngo.mobile,
                 complete: ngo.account_status === 'new', url: `${DASHBOARD_URL()}/dashboard/ngos/${ngo.id}`,
+            }),
+        });
+    }
+});
+
+/**
+ * The NGO changed its own data (changes: labels) or sent its completed file for review (submitted):
+ * one email per active super admin. Its status is untouched, so an approved NGO keeps working as before.
+ */
+export const notifyNgoUpdated = (ngoId, { changes = [], submitted = false } = {}) => safely('ngo updated', async () => {
+    const { rows: [ngo] } = await pool.query('SELECT id, ngo_name, reg_number FROM ngos WHERE id = $1', [ngoId]);
+    if (!ngo) return;
+    const { rows: admins } = await pool.query(SUPER_ADMINS_SQL);
+    for (const admin of admins) {
+        queueEmail({
+            to: admin.email,
+            ...ngoProfileUpdatedEmail({
+                staffName: admin.name, ngoName: ngo.ngo_name, regNumber: ngo.reg_number, changes, submitted,
+                url: `${DASHBOARD_URL()}/dashboard/ngos/${ngo.id}`,
             }),
         });
     }
